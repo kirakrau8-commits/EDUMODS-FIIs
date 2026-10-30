@@ -1,0 +1,6 @@
+{
+  "name": "EDUMODS FIIs",
+  "description": "Plataforma premium para gestão, análise e planejamento de Fundos de Investimento Imobiliário (FIIs) brasileiros.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
