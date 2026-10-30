@@ -10,8 +10,10 @@ import {
   ShieldCheck,
   CheckCircle,
   Menu,
+  LogOut,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface HeaderProps {
   activeModuleTitle: string;
@@ -36,6 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
     dividends,
   } = usePortfolio();
 
+  const { user, signOut } = useAuth();
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
 
   const pendingDividendsCount = dividends.filter((d) => d.status === 'PREVISTO').length;
@@ -141,12 +144,12 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl bg-[#0F172A] border border-slate-700/80 hover:border-slate-600 transition-colors text-left"
           aria-label="Abrir menu da conta do usuário"
         >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-slate-700 to-slate-600 flex items-center justify-center text-white text-xs font-bold border border-slate-600">
-            {currentUser.name.charAt(0)}
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-emerald-600 to-slate-700 flex items-center justify-center text-white text-xs font-bold border border-emerald-500/30">
+            {user?.email ? user.email.charAt(0).toUpperCase() : currentUser.name.charAt(0)}
           </div>
           <div className="hidden md:flex flex-col">
-            <span className="text-xs font-semibold text-white leading-tight truncate max-w-[110px]">
-              {currentUser.name.split(' ')[0]}
+            <span className="text-xs font-semibold text-white leading-tight truncate max-w-[120px]">
+              {user?.email ? user.email.split('@')[0] : currentUser.name.split(' ')[0]}
             </span>
             <span className="text-[10px] text-emerald-400 font-medium leading-none flex items-center gap-1">
               <ShieldCheck className="w-2.5 h-2.5" />
@@ -154,6 +157,17 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+        </button>
+
+        {/* Botão Sair (Logout Supabase) */}
+        <button
+          onClick={() => signOut()}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-rose-400 bg-slate-900/80 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 transition-colors"
+          title="Encerrar sessão Supabase Auth"
+          aria-label="Sair do sistema"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Sair</span>
         </button>
       </div>
     </header>

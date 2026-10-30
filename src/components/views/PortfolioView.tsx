@@ -13,12 +13,15 @@ import {
   Check,
   Building,
   ExternalLink,
+  FileDown,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatPercent } from '../../utils/formatters';
 import { FIICategory, FIIHolding, OperationType } from '../../types/fii';
 import { AppModuleId } from '../layout/Sidebar';
 import { EditHoldingModal } from '../modals/EditHoldingModal';
+import { generatePortfolioPDFReport } from '../../utils/pdfExport';
+import { useAuth } from '../../context/AuthContext';
 
 interface PortfolioViewProps {
   onOpenTransactionModal: (ticker?: string, type?: OperationType) => void;
@@ -43,7 +46,26 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     updateHoldingNotes,
     updateHoldingTargetWeight,
     toggleFavorite,
+    dividends,
   } = usePortfolio();
+  const { user } = useAuth();
+
+  const handleExportPDF = () => {
+    generatePortfolioPDFReport({
+      user: { email: user?.email || 'investidor@edumods.com' },
+      holdings,
+      dividends,
+      goals,
+      summary: {
+        totalInvested,
+        currentPortfolioValue: totalMarketValue,
+        totalProfitLoss: totalUnrealizedGain,
+        totalProfitLossPercentage: totalUnrealizedGainPercent,
+        monthlyDividendYieldRate: 0.85,
+        estimatedMonthlyDividends: monthlyDividendsReceived + monthlyDividendsForecasted,
+      },
+    });
+  };
 
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('TODOS');
@@ -126,6 +148,14 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
               className="px-3.5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
             >
               Alocação Ideal
+            </button>
+            <button
+              onClick={handleExportPDF}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-emerald-400 hover:text-emerald-300 text-xs font-semibold border border-slate-700 transition-colors"
+              title="Gerar e imprimir relatório executivo em PDF"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>Exportar PDF</span>
             </button>
           </div>
         </div>

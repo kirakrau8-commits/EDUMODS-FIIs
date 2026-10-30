@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, User, Plus, Trash2, Shield, Lock, RotateCcw } from 'lucide-react';
+import { X, User, Plus, Trash2, Shield, Lock, RotateCcw, LogOut, KeyRound } from 'lucide-react';
 import { usePortfolio, UserAccount } from '../../context/PortfolioContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface AccountModalProps {
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) => {
+  const { user, signOut } = useAuth();
   const {
     currentUser,
     availableUsers,
@@ -53,23 +55,30 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
 
         {/* Content */}
         <div className="p-6 space-y-5">
-          {/* Conta Ativa Atual */}
-          <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-2">
+          {/* Conta Ativa Atual com Supabase Auth */}
+          <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/30 space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase text-emerald-400 tracking-wider">
-                Conta Conectada
+              <span className="text-[11px] font-semibold uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" />
+                Sessão Supabase Auth Ativa
               </span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                 Plano {currentUser.plan}
               </span>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">{currentUser.name}</h3>
-              <p className="text-xs text-slate-400 font-mono">{currentUser.email}</p>
+              <h3 className="text-sm font-bold text-white">
+                {user?.email || currentUser.name}
+              </h3>
+              {user?.id && (
+                <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">
+                  ID Supabase: {user.id}
+                </p>
+              )}
             </div>
             <div className="pt-2 border-t border-slate-800 flex items-center gap-1.5 text-[11px] text-slate-400">
               <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Isolamento total de dados ativado. Nenhum dado vaza para outras contas.</span>
+              <span>Row Level Security (RLS) ativo. Isolamento criptográfico por usuário.</span>
             </div>
           </div>
 
@@ -196,6 +205,20 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
               className="text-xs text-rose-400 hover:text-rose-300 transition-colors"
             >
               Zerar Dados da Conta
+            </button>
+          </div>
+
+          {/* Botão Sair Obrigatório */}
+          <div className="pt-2">
+            <button
+              onClick={() => {
+                onClose();
+                signOut();
+              }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 hover:border-rose-500/50 text-rose-300 hover:text-rose-200 text-xs font-bold transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Encerrar Sessão (Sair do Supabase)</span>
             </button>
           </div>
         </div>

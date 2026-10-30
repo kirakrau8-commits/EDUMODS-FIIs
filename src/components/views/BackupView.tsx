@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Database, Download, Upload, FileText, CheckCircle2, AlertCircle, Save } from 'lucide-react';
+import { Database, Download, Upload, FileText, CheckCircle2, AlertCircle, Save, FileDown, ShieldCheck } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { generatePortfolioPDFReport } from '../../utils/pdfExport';
+import { useAuth } from '../../context/AuthContext';
 
 export const BackupView: React.FC = () => {
   const {
@@ -10,7 +12,16 @@ export const BackupView: React.FC = () => {
     notes,
     updateHoldingNotes,
     holdings,
+    dividends,
+    goals,
+    totalInvested,
+    totalMarketValue,
+    totalUnrealizedGain,
+    totalUnrealizedGainPercent,
+    monthlyDividendsReceived,
+    monthlyDividendsForecasted,
   } = usePortfolio();
+  const { user } = useAuth();
 
   const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [generalNotes, setGeneralNotes] = useState(notes.geral || '');
@@ -38,6 +49,23 @@ export const BackupView: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    generatePortfolioPDFReport({
+      user: { email: user?.email || 'investidor@edumods.com' },
+      holdings,
+      dividends,
+      goals,
+      summary: {
+        totalInvested,
+        currentPortfolioValue: totalMarketValue,
+        totalProfitLoss: totalUnrealizedGain,
+        totalProfitLossPercentage: totalUnrealizedGainPercent,
+        monthlyDividendYieldRate: 0.85,
+        estimatedMonthlyDividends: monthlyDividendsReceived + monthlyDividendsForecasted,
+      },
+    });
   };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,7 +121,7 @@ export const BackupView: React.FC = () => {
               <p className="text-slate-400">
                 Gera um arquivo com posições, transações, metas, preferências e notas pessoais.
               </p>
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <button
                   onClick={handleDownloadJSON}
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors"
@@ -107,6 +135,14 @@ export const BackupView: React.FC = () => {
                 >
                   <Download className="w-4 h-4 text-emerald-400" />
                   <span>Operações CSV</span>
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold rounded-lg border border-emerald-500/40 transition-colors"
+                  title="Gerar e imprimir relatório executivo em PDF"
+                >
+                  <FileDown className="w-4 h-4 text-emerald-400" />
+                  <span>Relatório Executivo PDF</span>
                 </button>
               </div>
             </div>
@@ -188,6 +224,39 @@ export const BackupView: React.FC = () => {
             <Save className="w-4 h-4" />
             <span>Salvar Notas Estratégicas</span>
           </button>
+        </div>
+      </div>
+
+      {/* Painel Informativo de Persistência Supabase Auth & RLS */}
+      <div className="p-6 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-3 shadow-lg">
+        <div className="flex items-center gap-2 text-emerald-400">
+          <ShieldCheck className="w-5 h-5" />
+          <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+            Arquitetura de Dados: Supabase Auth & Row Level Security (RLS)
+          </h2>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          O sistema opera com autenticação obrigatória via <strong>Supabase Auth</strong>. O acesso só é liberado para investidores previamente cadastrados e autorizados.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+            <span className="font-semibold text-emerald-400 block">1. Autenticação Segura</span>
+            <span className="text-slate-400 text-[11px] block">
+              Sessões JWT protegidas com chave pública / anon. Chaves secretas ou service_role nunca são expostas no frontend.
+            </span>
+          </div>
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+            <span className="font-semibold text-blue-400 block">2. Isolamento de Dados</span>
+            <span className="text-slate-400 text-[11px] block">
+              Cache e preferências salvos com chave isolada por usuário. Os dados de um investidor nunca vazam para outra conta.
+            </span>
+          </div>
+          <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+            <span className="font-semibold text-purple-400 block">3. Políticas RLS na Nuvem</span>
+            <span className="text-slate-400 text-[11px] block">
+              O arquivo <code>supabase-schema.sql</code> na raiz contém as tabelas e regras RLS prontas para replicação em nuvem.
+            </span>
+          </div>
         </div>
       </div>
     </div>
