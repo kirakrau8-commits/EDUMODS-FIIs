@@ -19,6 +19,10 @@ import {
   buildPlatformNotifications,
   loadReadNotificationIds,
   dispatchBrowserNotificationsForTriggeredAlerts,
+  registerNotificationServiceWorker,
+  subscribeDeviceToWebPush,
+  syncPortfolioWithServerMonitor,
+  canUseBrowserNotifications,
   NotificationToastPayload,
 } from '../../utils/alertsEngine';
 
@@ -38,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
   const {
     currentUser,
     preferences,
+    goals,
     toggleHideValues,
     refreshQuotes,
     isRefreshingQuotes,
@@ -50,6 +55,34 @@ export const Header: React.FC<HeaderProps> = ({
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [readIds, setReadIds] = useState<string[]>(() => loadReadNotificationIds());
   const [liveToast, setLiveToast] = useState<NotificationToastPayload | null>(null);
+
+  useEffect(() => {
+    void registerNotificationServiceWorker().then(() => {
+      if (canUseBrowserNotifications() && window.Notification.permission === 'granted') {
+        void subscribeDeviceToWebPush({
+          userId: currentUser.id,
+          holdings,
+          dividends,
+          preferences,
+          goals,
+        });
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void syncPortfolioWithServerMonitor({
+        userId: currentUser.id,
+        holdings,
+        dividends,
+        preferences,
+        goals,
+        runMonitorNow: false,
+      });
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [currentUser.id, holdings, dividends, preferences, goals]);
 
   useEffect(() => {
     const handleSyncRead = () => {
@@ -82,9 +115,10 @@ export const Header: React.FC<HeaderProps> = ({
       holdings,
       dividends,
       preferences,
+      goals,
       readIds,
     });
-  }, [holdings, dividends, preferences, readIds]);
+  }, [holdings, dividends, preferences, goals, readIds]);
 
   useEffect(() => {
     if (notificationSummary.unread.length > 0) {

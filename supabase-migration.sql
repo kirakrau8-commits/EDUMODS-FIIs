@@ -1,14 +1,15 @@
 -- =============================================================================
--- EDUMODS FIIs — MIGRAÇÃO SQL PARA MODO DE USO PESSOAL (SEM EXIGIR LOGIN AUTH)
+-- EDUMODS FIIs — MIGRAÇÃO SQL PARA MODO PESSOAL + WEB PUSH EM SEGUNDO PLANO
 -- =============================================================================
 -- OBJETIVO:
--- 1. Preservar integralmente as 6 tabelas antigas (profiles, portfolios, funds,
---    transactions, payments, portfolio_snapshots) e seus dados.
--- 2. Criar/atualizar as 6 tabelas fii_* (fii_user_profiles, fii_holdings,
---    fii_transactions, fii_dividends, fii_goals, fii_notes) para uso pessoal
---    sem exigir login (Supabase Auth), utilizando o UUID pessoal fixo
---    '00000000-0000-4000-8000-000000000001' (ou o UUID já existente no banco).
--- 3. Liberar 100% dos recursos (plan = 'VIP', role = 'admin') para uso pessoal.
+-- 1. Preservar integralmente as tabelas antigas e todos os dados da carteira.
+-- 2. Manter as 6 tabelas fii_* funcionando no modo pessoal sem login.
+-- 3. Criar as 3 tabelas do sistema de Web Push e Monitoramento Automático:
+--    - public.fii_push_subscriptions (acesso restrito ao servidor / service_role)
+--    - public.fii_notification_logs (histórico persistente e anti-duplicidade)
+--    - public.fii_monitoring_state (diagnóstico do último monitoramento e cotação)
+-- 4. Garantir que nenhuma chave privada ou credencial Push fique exposta a
+--    consultas públicas (anon).
 -- =============================================================================
 
 BEGIN;
@@ -16,7 +17,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =============================================================================
--- 1. CRIAÇÃO / EVOLUÇÃO DAS 6 TABELAS fii_* (SEM DEPENDÊNCIA DE auth.users)
+-- 1. CRIAÇÃO / EVOLUÇÃO DAS 6 TABELAS DA CARTEIRA (SEM DEPENDÊNCIA DE auth.users)
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS public.fii_user_profiles (
@@ -103,7 +104,53 @@ CREATE TABLE IF NOT EXISTS public.fii_notes (
 );
 
 -- =============================================================================
--- 2. REMOÇÃO DE FOREIGN KEYS PARA auth.users NAS TABELAS fii_* (MODO SEM LOGIN)
+-- 2. TABELAS DE WEB PUSH E MONITORAMENTO AUTOMÁTICO EM SEGUNDO PLANO
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.fii_push_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL DEFAULT '00000000-0000-4000-8000-000000000001'::uuid,
+    endpoint TEXT NOT NULL,
+    p256dh_key TEXT NOT NULL,
+    auth_key TEXT NOT NULL,
+    user_agent TEXT DEFAULT '',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT DEFAULT NULL,
+    last_success_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.fii_notification_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL DEFAULT '00000000-0000-4000-8000-000000000001'::uuid,
+    notification_id TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'oportunidade',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    ticker TEXT DEFAULT NULL,
+    channel TEXT NOT NULL DEFAULT 'web_push_background',
+    delivered_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.fii_monitoring_state (
+    user_id UUID PRIMARY KEY DEFAULT '00000000-0000-4000-8000-000000000001'::uuid,
+    last_monitor_run_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    last_quote_update_at TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    quote_source TEXT DEFAULT 'B3 Tempo Real',
+    is_fallback_data BOOLEAN NOT NULL DEFAULT false,
+    evaluated_count INTEGER NOT NULL DEFAULT 0,
+    triggered_count INTEGER NOT NULL DEFAULT 0,
+    pushed_count INTEGER NOT NULL DEFAULT 0,
+    last_status TEXT NOT NULL DEFAULT 'ok',
+    last_error TEXT DEFAULT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- =============================================================================
+-- 3. REMOÇÃO DE FOREIGN KEYS PARA auth.users NAS TABELAS fii_* (MODO SEM LOGIN)
 -- =============================================================================
 DO $$
 DECLARE
@@ -121,7 +168,10 @@ BEGIN
               'fii_transactions',
               'fii_dividends',
               'fii_goals',
-              'fii_notes'
+              'fii_notes',
+              'fii_push_subscriptions',
+              'fii_notification_logs',
+              'fii_monitoring_state'
           )
           AND tc.constraint_type = 'FOREIGN KEY'
     LOOP
@@ -129,11 +179,10 @@ BEGIN
     END LOOP;
 END $$;
 
--- Remove trigger antiga de bloqueio de plano para liberar plano VIP no uso pessoal
 DROP TRIGGER IF EXISTS trg_protect_fii_user_profile_admin_fields ON public.fii_user_profiles;
 
 -- =============================================================================
--- 3. GARANTIA DE COLUNAS E CONSTRAINTS
+-- 4. GARANTIA DE COLUNAS E CONSTRAINTS
 -- =============================================================================
 ALTER TABLE public.fii_user_profiles
     ADD COLUMN IF NOT EXISTS full_name TEXT DEFAULT 'Eduardo',
@@ -189,7 +238,7 @@ ALTER TABLE public.fii_notes
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL;
 
 -- =============================================================================
--- 4. CONSOLIDAÇÃO DE REGISTROS DUPLICADOS E ÍNDICES UNIQUE PARA UPSERT
+-- 5. CONSOLIDAÇÃO DE REGISTROS DUPLICADOS E ÍNDICES UNIQUE PARA UPSERT
 -- =============================================================================
 DO $$
 BEGIN
@@ -251,9 +300,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS fii_user_profiles_user_id_uidx ON public.fii_u
 CREATE UNIQUE INDEX IF NOT EXISTS fii_holdings_user_id_ticker_uidx ON public.fii_holdings (user_id, ticker);
 CREATE UNIQUE INDEX IF NOT EXISTS fii_goals_user_id_uidx ON public.fii_goals (user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS fii_notes_user_id_topic_uidx ON public.fii_notes (user_id, topic);
+CREATE UNIQUE INDEX IF NOT EXISTS fii_push_subscriptions_endpoint_uidx ON public.fii_push_subscriptions (endpoint);
+CREATE UNIQUE INDEX IF NOT EXISTS fii_notification_logs_user_notif_uidx ON public.fii_notification_logs (user_id, notification_id);
 
 -- =============================================================================
--- 5. PERFIL PESSOAL PADRÃO COM ACESSO TOTAL LIBERADO (VIP / ADMIN)
+-- 6. PERFIL PESSOAL PADRÃO COM ACESSO TOTAL LIBERADO (VIP / ADMIN)
 -- =============================================================================
 INSERT INTO public.fii_user_profiles (user_id, full_name, plan, role, preferences, is_initialized)
 VALUES (
@@ -269,12 +320,11 @@ ON CONFLICT (user_id) DO UPDATE SET
     role = 'admin',
     updated_at = timezone('utc'::text, now());
 
--- Atualiza qualquer perfil já existente para VIP / admin (uso pessoal liberado)
 UPDATE public.fii_user_profiles
 SET plan = 'VIP', role = 'admin', updated_at = timezone('utc'::text, now());
 
 -- =============================================================================
--- 6. POLÍTICAS RLS PARA MODO PESSOAL (ACESSO DIRETO SEM LOGIN)
+-- 7. POLÍTICAS RLS (CARTEIRA PESSOAL + PROTEÇÃO DE CREDENCIAIS PUSH)
 -- =============================================================================
 ALTER TABLE public.fii_user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fii_holdings ENABLE ROW LEVEL SECURITY;
@@ -282,6 +332,9 @@ ALTER TABLE public.fii_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fii_dividends ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fii_goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fii_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fii_push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fii_notification_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fii_monitoring_state ENABLE ROW LEVEL SECURITY;
 
 DO $$
 DECLARE
@@ -297,62 +350,40 @@ BEGIN
               'fii_transactions',
               'fii_dividends',
               'fii_goals',
-              'fii_notes'
+              'fii_notes',
+              'fii_push_subscriptions',
+              'fii_notification_logs',
+              'fii_monitoring_state'
           )
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', pol.policyname, pol.tablename);
     END LOOP;
 END $$;
 
--- Políticas para uso pessoal exclusivo (permite operação sem sessão Supabase Auth)
-CREATE POLICY "fii_user_profiles_personal_all"
-    ON public.fii_user_profiles
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "fii_user_profiles_personal_all" ON public.fii_user_profiles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_holdings_personal_all" ON public.fii_holdings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_transactions_personal_all" ON public.fii_transactions FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_dividends_personal_all" ON public.fii_dividends FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_goals_personal_all" ON public.fii_goals FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_notes_personal_all" ON public.fii_notes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "fii_holdings_personal_all"
-    ON public.fii_holdings
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "fii_notification_logs_personal_all" ON public.fii_notification_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "fii_monitoring_state_personal_select" ON public.fii_monitoring_state FOR SELECT TO anon, authenticated USING (true);
 
-CREATE POLICY "fii_transactions_personal_all"
-    ON public.fii_transactions
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
+-- SEGURANÇA ESTRITA: fii_push_subscriptions NUNCA é exposta a anon/authenticated.
+-- Somente o servidor backend (usando SUPABASE_SERVICE_ROLE_KEY) acessa fii_push_subscriptions.
+REVOKE ALL ON public.fii_push_subscriptions FROM anon, authenticated;
+GRANT ALL ON public.fii_push_subscriptions TO service_role;
 
-CREATE POLICY "fii_dividends_personal_all"
-    ON public.fii_dividends
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY "fii_goals_personal_all"
-    ON public.fii_goals
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
-
-CREATE POLICY "fii_notes_personal_all"
-    ON public.fii_notes
-    FOR ALL
-    TO anon, authenticated
-    USING (true)
-    WITH CHECK (true);
-
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_user_profiles TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_holdings TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_transactions TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_dividends TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_goals TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_notes TO anon, authenticated;
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_user_profiles TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_holdings TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_transactions TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_dividends TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_goals TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_notes TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.fii_notification_logs TO anon, authenticated, service_role;
+GRANT SELECT ON public.fii_monitoring_state TO anon, authenticated;
+GRANT ALL ON public.fii_monitoring_state TO service_role;
 
 COMMIT;

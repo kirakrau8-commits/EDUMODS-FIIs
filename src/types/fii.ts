@@ -84,7 +84,7 @@ export interface RebalanceItem {
 export interface CustomPriceAlert {
   id: string;
   ticker: string;
-  type: 'PRECO_TETO' | 'PVP_MAXIMO' | 'PROVENTO_MINIMO';
+  type: 'PRECO_TETO' | 'PVP_MAXIMO' | 'PROVENTO_MINIMO' | 'PRECO_COMPRA';
   thresholdValue: number;
   isActive: boolean;
 }

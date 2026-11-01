@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "EDUMODS FIIs — Gestão de Fundos Imobiliários",
+  "short_name": "EDUMODS FIIs",
+  "description": "Plataforma pessoal de gestão, alertas em tempo real e monitoramento de Fundos Imobiliários (FIIs).",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#090D16",
+  "theme_color": "#10B981",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

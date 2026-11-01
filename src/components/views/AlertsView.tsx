@@ -19,6 +19,10 @@ import {
   PauseCircle,
   PlayCircle,
   ExternalLink,
+  RefreshCw,
+  Server,
+  Smartphone,
+  Radio,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { CustomPriceAlert } from '../../types/fii';
@@ -31,6 +35,7 @@ import {
   sendRealTestNotification,
   loadNotificationHistory,
   clearNotificationHistory,
+  syncPortfolioWithServerMonitor,
   BrowserNotificationDiagnostics,
   NotificationHistoryEntry,
   CustomAlertState,
@@ -38,7 +43,8 @@ import {
 import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 export const AlertsView: React.FC = () => {
-  const { preferences, updatePreferences, holdings } = usePortfolio();
+  const { currentUser, preferences, updatePreferences, holdings, dividends, goals } =
+    usePortfolio();
 
   const [newTicker, setNewTicker] = useState<string>('HGLG11');
   const [newType, setNewType] = useState<CustomPriceAlert['type']>('PRECO_TETO');
@@ -71,6 +77,8 @@ export const AlertsView: React.FC = () => {
     instructions?: string[];
   } | null>(null);
   const [isActivating, setIsActivating] = useState<boolean>(false);
+  const [isTestingPush, setIsTestingPush] = useState<boolean>(false);
+  const [isRunningServerMonitor, setIsRunningServerMonitor] = useState<boolean>(false);
 
   const customAlerts = preferences.customAlerts || [];
 
@@ -81,6 +89,20 @@ export const AlertsView: React.FC = () => {
     };
     window.addEventListener('edumods-notifications-updated', syncState);
     return () => window.removeEventListener('edumods-notifications-updated', syncState);
+  }, []);
+
+  useEffect(() => {
+    void syncPortfolioWithServerMonitor({
+      userId: currentUser.id,
+      holdings,
+      dividends,
+      preferences,
+      goals,
+      runMonitorNow: false,
+    }).then(() => {
+      setDiagnostics(getNotificationSystemDiagnostics());
+      setHistoryList(loadNotificationHistory());
+    });
   }, []);
 
   const evaluatedAlerts = useMemo(() => {
@@ -125,7 +147,7 @@ export const AlertsView: React.FC = () => {
     const pvp = h?.pvp ?? db?.pvp ?? 1.0;
     const div = h?.monthlyYieldPerShare ?? db?.lastDividend ?? 0;
 
-    if (newType === 'PRECO_TETO' && price > 0) {
+    if ((newType === 'PRECO_TETO' || newType === 'PRECO_COMPRA') && price > 0) {
       setNewValue(price.toFixed(2));
     } else if (newType === 'PVP_MAXIMO' && pvp > 0) {
       setNewValue(pvp.toFixed(2));
@@ -136,7 +158,7 @@ export const AlertsView: React.FC = () => {
 
   const handleSelectTypeAndSuggest = (typeVal: CustomPriceAlert['type']) => {
     setNewType(typeVal);
-    if (typeVal === 'PRECO_TETO' && selectedTickerReference.price > 0) {
+    if ((typeVal === 'PRECO_TETO' || typeVal === 'PRECO_COMPRA') && selectedTickerReference.price > 0) {
       setNewValue(selectedTickerReference.price.toFixed(2));
     } else if (typeVal === 'PVP_MAXIMO' && selectedTickerReference.pvp > 0) {
       setNewValue(selectedTickerReference.pvp.toFixed(2));
@@ -166,7 +188,6 @@ export const AlertsView: React.FC = () => {
       return;
     }
 
-    // Evita cadastrar alerta duplicado idêntico
     const duplicate = customAlerts.find(
       (a) =>
         a.ticker.toUpperCase() === cleanTicker &&
@@ -195,7 +216,7 @@ export const AlertsView: React.FC = () => {
 
     setFormFeedback({
       type: 'success',
-      text: `Alerta para ${cleanTicker} cadastrado e em monitoramento ativo!`,
+      text: `Alerta para ${cleanTicker} cadastrado e sincronizado com o monitoramento automático!`,
     });
     setTimeout(() => setFormFeedback(null), 4000);
   };
@@ -244,52 +265,54 @@ export const AlertsView: React.FC = () => {
   const handleEnableBrowserNotifications = async () => {
     setIsActivating(true);
     try {
-      const result = await activateNotificationsWithFeedback();
+      const result = await activateNotificationsWithFeedback({
+        userId: currentUser.id,
+        holdings,
+        dividends,
+        preferences,
+        goals,
+      });
       setDiagnostics(result);
       setHistoryList(loadNotificationHistory());
 
       if (result.statusCode === 'granted') {
         setActionBanner({
           tone: 'emerald',
-          title: 'Notificações Ativadas com Sucesso!',
-          message:
-            'Permissão concedida pelo navegador! Enviamos uma notificação de confirmação agora mesmo e salvamos sua preferência para quando você reabrir o site.',
+          title: result.push.isSubscribed
+            ? 'Notificações Nativas & Web Push em Segundo Plano Ativados!'
+            : 'Permissão Concedida e Service Worker Ativado!',
+          message: result.push.isSubscribed
+            ? `Permissão concedida e inscrição Web Push registrada com sucesso (${result.push.endpointMasked}). Uma notificação nativa foi enviada para a central do seu dispositivo.`
+            : 'Permissão concedida! O Service Worker foi ativado e uma notificação nativa de confirmação foi disparada.',
           instructions: result.instructions,
         });
       } else if (result.statusCode === 'denied') {
         setActionBanner({
-          tone: 'amber',
-          title: 'Permissão Nativa Bloqueada no Navegador — Alertas Internos Ativados',
+          tone: 'rose',
+          title: 'Permissão Nativa Bloqueada no Android / Navegador',
           message:
-            'Os alertas visuais dentro do EDUMODS FIIs foram ativados! Porém, o seu navegador está configurado para bloquear pop-ups deste endereço. Veja abaixo como liberar:',
+            'O navegador negou a permissão de notificações nativas. Sem essa permissão, o sistema operacional bloqueia o recebimento na central de notificações do celular. Veja como desbloquear:',
           instructions: result.instructions,
         });
       } else if (result.statusCode === 'iframe_restricted') {
         setActionBanner({
-          tone: 'blue',
-          title: 'Alertas em Tempo Real Ativados no Painel!',
+          tone: 'amber',
+          title: 'Restrição de Janela Incorporada (Iframe) Detectada',
           message:
-            'Sua preferência foi salva e os avisos instantâneos na tela estão ativos! Como você está visualizando dentro de uma janela incorporada (iframe), navegadores bloqueiam pop-ups externos do sistema operacional a menos que você abra o site diretamente em uma nova guia.',
+            'Navegadores bloqueiam o pedido de permissão nativa do Android quando o site é aberto dentro de um quadro (iframe). Abra o endereço diretamente no Chrome do seu celular para autorizar o Web Push.',
           instructions: result.instructions,
         });
       } else if (result.statusCode === 'insecure_context') {
         setActionBanner({
           tone: 'rose',
-          title: 'Conexão HTTPS Necessária para Pop-ups do Navegador',
-          message: result.statusDescription,
-          instructions: result.instructions,
-        });
-      } else if (result.statusCode === 'unsupported') {
-        setActionBanner({
-          tone: 'amber',
-          title: 'Navegador sem Suporte à API Nativa — Alertas no Painel Ativos',
+          title: 'Conexão HTTPS Obrigatória para Notificações Nativas e Push',
           message: result.statusDescription,
           instructions: result.instructions,
         });
       } else {
         setActionBanner({
-          tone: 'emerald',
-          title: 'Monitoramento e Alertas Instantâneos Ativados!',
+          tone: 'amber',
+          title: result.statusTitle,
           message: result.statusDescription,
           instructions: result.instructions,
         });
@@ -300,19 +323,79 @@ export const AlertsView: React.FC = () => {
   };
 
   const handleTestRealNotification = async () => {
-    const firstTriggered = evaluatedAlerts.find((e) => e.alertState === 'ATINGIDO');
-    const res = await sendRealTestNotification({
-      activeCount: counts.totalActive,
-      triggeredCount: counts.triggered,
-      sampleTicker: firstTriggered?.alert.ticker || holdings[0]?.ticker || 'HGLG11',
-    });
-    setDiagnostics(res.diagnostics);
-    setHistoryList(loadNotificationHistory());
-    setActionBanner({
-      tone: 'emerald',
-      title: 'Teste de Notificação Real Executado!',
-      message: res.message,
-    });
+    setIsTestingPush(true);
+    try {
+      const firstTriggered = evaluatedAlerts.find((e) => e.alertState === 'ATINGIDO');
+      const res = await sendRealTestNotification({
+        activeCount: counts.totalActive,
+        triggeredCount: counts.triggered,
+        sampleTicker: firstTriggered?.alert.ticker || holdings[0]?.ticker || 'HGLG11',
+        portfolioState: {
+          userId: currentUser.id,
+          holdings,
+          dividends,
+          preferences,
+          goals,
+        },
+      });
+      setDiagnostics(res.diagnostics);
+      setHistoryList(loadNotificationHistory());
+
+      // NUNCA exibe mensagem de sucesso se a notificação nativa não tiver sido entregue!
+      if (!res.deliveredNative) {
+        setActionBanner({
+          tone: 'rose',
+          title: 'Não Foi Possível Entregar a Notificação Nativa no Dispositivo',
+          message: res.message,
+          instructions: res.diagnostics.instructions,
+        });
+        return;
+      }
+
+      setActionBanner({
+        tone: 'emerald',
+        title: res.deliveredServerPush
+          ? 'Notificação de Teste Entregue via Servidor Web Push + Service Worker!'
+          : 'Notificação Nativa Entregue via Service Worker (showNotification)!',
+        message: res.message,
+      });
+    } finally {
+      setIsTestingPush(false);
+    }
+  };
+
+  const handleRunServerMonitorNow = async () => {
+    setIsRunningServerMonitor(true);
+    try {
+      const monitorState = await syncPortfolioWithServerMonitor({
+        userId: currentUser.id,
+        holdings,
+        dividends,
+        preferences,
+        goals,
+        runMonitorNow: true,
+      });
+      const updatedDiag = getNotificationSystemDiagnostics();
+      setDiagnostics(updatedDiag);
+      setHistoryList(loadNotificationHistory());
+
+      if (monitorState) {
+        setActionBanner({
+          tone: monitorState.isFallbackData ? 'amber' : 'emerald',
+          title: 'Varredura Automática do Servidor Concluída!',
+          message: `Monitoramento executado com sucesso (${monitorState.quoteSource}): ${monitorState.evaluatedCount} regra(s) verificada(s), ${monitorState.triggeredCount} condição(ões) atingida(s) e ${monitorState.pushedCount} novo(s) disparo(s) Push enviado(s).`,
+        });
+      } else {
+        setActionBanner({
+          tone: 'rose',
+          title: 'Falha ao Contatar o Serviço de Monitoramento do Servidor',
+          message:
+            'Não foi possível executar a rota /api/cron/monitor no momento. Verifique sua conexão.',
+        });
+      }
+    } finally {
+      setIsRunningServerMonitor(false);
+    }
   };
 
   const handleClearHistory = () => {
@@ -324,8 +407,24 @@ export const AlertsView: React.FC = () => {
   const maxConcId = useId();
   const minYieldId = useId();
 
-  const isNotificationsActive =
-    diagnostics.permission === 'granted' || diagnostics.inAppAlertsEnabled;
+  const lastMonitorFormatted = diagnostics.monitoring.lastMonitorRunAt
+    ? new Date(diagnostics.monitoring.lastMonitorRunAt).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : 'Aguardando 1º ciclo';
+
+  const lastQuoteFormatted = diagnostics.monitoring.lastQuoteUpdateAt
+    ? new Date(diagnostics.monitoring.lastQuoteUpdateAt).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Sincronizando...';
 
   return (
     <div className="space-y-6 pb-12">
@@ -334,7 +433,7 @@ export const AlertsView: React.FC = () => {
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-              Monitoramento Ativo em Tempo Real
+              Monitoramento Automático (Servidor + Push Android)
             </span>
             <span className="text-xs text-slate-400 font-mono">
               {counts.triggered} atingido(s) · {counts.monitoring} monitorando · {counts.paused} pausado(s)
@@ -342,21 +441,37 @@ export const AlertsView: React.FC = () => {
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-            Alertas Inteligentes de Preço, P/VP & Risco
+            Alertas Inteligentes & Web Push em Segundo Plano
           </h1>
           <p className="text-xs text-slate-400 max-w-2xl">
-            Programe gatilhos para comprar fundos descontados, acompanhar dividendos mínimos por cota e receber notificações reais sempre que uma condição for atingida.
+            Receba notificações reais na central do seu celular Android mesmo com o site fechado. O servidor monitora preço-teto, P/VP, dividendos, data-com, pagamentos e risco de carteira automaticamente.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleRunServerMonitorNow}
+            disabled={isRunningServerMonitor}
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            title="Executar imediatamente um ciclo de verificação de cotações e alertas no servidor"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-blue-400 ${
+                isRunningServerMonitor ? 'animate-spin' : ''
+              }`}
+            />
+            <span>{isRunningServerMonitor ? 'Verificando...' : 'Verificar Agora no Servidor'}</span>
+          </button>
+
           <button
             type="button"
             onClick={handleTestRealNotification}
+            disabled={isTestingPush}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
           >
             <Send className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Testar Notificação Real</span>
+            <span>{isTestingPush ? 'Enviando Teste...' : 'Testar Notificação'}</span>
           </button>
 
           <button
@@ -364,26 +479,28 @@ export const AlertsView: React.FC = () => {
             onClick={handleEnableBrowserNotifications}
             disabled={isActivating}
             className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              diagnostics.permission === 'granted'
+              diagnostics.permission === 'granted' && diagnostics.push.isSubscribed
                 ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40'
                 : diagnostics.permission === 'denied'
-                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40'
+                ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40'
                 : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20'
             }`}
           >
             <BellRing className="w-4 h-4" />
             <span>
               {isActivating
-                ? 'Solicitando permissão...'
+                ? 'Ativando Push...'
+                : diagnostics.permission === 'granted' && diagnostics.push.isSubscribed
+                ? 'Push Ativo (Renovar Inscrição)'
                 : diagnostics.permission === 'granted'
-                ? 'Notificações Ativadas (Reenviar Teste)'
+                ? 'Sincronizar Inscrição Push'
                 : 'Ativar notificações'}
             </span>
           </button>
         </div>
       </div>
 
-      {/* Banner de Resposta Imediata ao clicar em "Ativar notificações" ou "Testar Notificação Real" */}
+      {/* Banner de Resposta Auditável ao clicar em "Ativar notificações" ou "Testar Notificação" */}
       {actionBanner && (
         <div
           role="status"
@@ -402,6 +519,8 @@ export const AlertsView: React.FC = () => {
             <div className="flex items-center gap-2">
               {actionBanner.tone === 'emerald' ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : actionBanner.tone === 'rose' ? (
+                <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
               )}
@@ -427,99 +546,187 @@ export const AlertsView: React.FC = () => {
         </div>
       )}
 
-      {/* Painel Permanente de Diagnóstico de Permissão, HTTPS e Status do Navegador */}
-      <div className="p-4 rounded-2xl bg-[#0F172A] border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-              diagnostics.permission === 'granted'
-                ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                : diagnostics.permission === 'denied'
-                ? 'bg-amber-500/15 border-amber-500/30 text-amber-400'
-                : isNotificationsActive
-                ? 'bg-blue-500/15 border-blue-500/30 text-blue-400'
-                : 'bg-slate-800 border-slate-700 text-slate-400'
-            }`}
-          >
-            <BellRing className="w-5 h-5" />
-          </div>
-          <div className="space-y-1 text-xs">
-            <div className="flex flex-wrap items-center gap-2">
-              <strong className="text-white font-bold text-sm">{diagnostics.statusTitle}</strong>
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                  diagnostics.isSecureContext
-                    ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
-                }`}
-              >
-                <ShieldCheck className="w-3 h-3" />
-                {diagnostics.isSecureContext ? 'HTTPS / Contexto Seguro OK' : 'Requer HTTPS'}
-              </span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
-                Permissão Nativa:{' '}
-                {diagnostics.permission === 'granted'
-                  ? 'CONCEDIDA'
+      {/* Central de Diagnóstico de Conexão, Permissão Android, Inscrição Push e Monitoramento */}
+      <div className="p-5 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-start gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                diagnostics.permission === 'granted'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
                   : diagnostics.permission === 'denied'
-                  ? 'NEGADA'
-                  : diagnostics.permission === 'unsupported'
-                  ? 'SEM SUPORTE'
-                  : 'PENDENTE'}
-              </span>
+                  ? 'bg-rose-500/15 border-rose-500/30 text-rose-400'
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-400'
+              }`}
+            >
+              <Smartphone className="w-5 h-5" />
             </div>
-            <p className="text-slate-400 leading-relaxed">{diagnostics.statusDescription}</p>
-            {diagnostics.permission === 'denied' && (
-              <div className="p-2.5 mt-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 space-y-1">
-                <strong className="block text-[11px] uppercase tracking-wider text-amber-300">
-                  Como habilitar nas configurações do navegador:
+            <div className="space-y-0.5 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <strong className="text-white font-bold text-sm">
+                  Diagnóstico em Tempo Real: {diagnostics.statusTitle}
                 </strong>
-                <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
-                  {diagnostics.instructions.map((step, i) => (
-                    <li key={i}>{step.replace(/^\d+\.\s*/, '')}</li>
-                  ))}
-                </ol>
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                    diagnostics.isSecureContext
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                  }`}
+                >
+                  <ShieldCheck className="w-3 h-3" />
+                  {diagnostics.isSecureContext ? 'HTTPS Seguro OK' : 'Requer HTTPS'}
+                </span>
               </div>
-            )}
+              <p className="text-slate-400 leading-relaxed">{diagnostics.statusDescription}</p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {diagnostics.isEmbeddedIframe && (
             <a
               href={typeof window !== 'undefined' ? window.location.href : '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition-colors shrink-0"
             >
-              <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Abrir em Nova Guia Direta</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Abrir Diretamente no Navegador</span>
             </a>
           )}
         </div>
+
+        {/* 4 Cartões de Diagnóstico Técnico: Permissão Android, Inscrição Push, Monitoramento Servidor, Última Cotação */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          {/* 1. Estado da Permissão Android */}
+          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                1. Permissão Android / SO
+              </span>
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <strong
+              className={`block font-mono text-sm ${
+                diagnostics.permission === 'granted'
+                  ? 'text-emerald-400'
+                  : diagnostics.permission === 'denied'
+                  ? 'text-rose-400'
+                  : 'text-amber-400'
+              }`}
+            >
+              {diagnostics.permission === 'granted'
+                ? 'CONCEDIDA (GRANTED)'
+                : diagnostics.permission === 'denied'
+                ? 'BLOQUEADA (DENIED)'
+                : diagnostics.permission === 'unsupported'
+                ? 'SEM SUPORTE'
+                : 'PENDENTE (DEFAULT)'}
+            </strong>
+            <span className="text-[11px] text-slate-400 block">
+              Service Worker:{' '}
+              <strong className="text-slate-200">
+                {diagnostics.push.serviceWorkerActive ? 'Ativo (sw.js v2.0)' : 'Aguardando registro'}
+              </strong>
+            </span>
+          </div>
+
+          {/* 2. Estado da Inscrição Web Push */}
+          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                2. Inscrição Web Push
+              </span>
+              <Radio className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <strong
+              className={`block font-mono text-sm ${
+                diagnostics.push.isSubscribed ? 'text-emerald-400' : 'text-amber-400'
+              }`}
+            >
+              {diagnostics.push.isSubscribed ? 'INSCRITO (PUSH ATIVO)' : 'NÃO INSCRITO'}
+            </strong>
+            <span className="text-[11px] text-slate-400 block truncate" title={diagnostics.push.endpointMasked || ''}>
+              {diagnostics.push.isSubscribed
+                ? `Endpoint: ${diagnostics.push.endpointMasked || 'Registrado'}`
+                : diagnostics.push.lastPushError || 'Clique em "Ativar notificações"'}
+            </span>
+          </div>
+
+          {/* 3. Último Monitoramento no Servidor */}
+          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                3. Último Monitoramento
+              </span>
+              <Server className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <strong className="block font-mono text-sm text-white">
+              {lastMonitorFormatted}
+            </strong>
+            <span className="text-[11px] text-slate-400 block">
+              {diagnostics.monitoring.evaluatedCount} regras avaliadas ·{' '}
+              <strong className="text-emerald-400">
+                {diagnostics.monitoring.triggeredCount} atingidas
+              </strong>
+            </span>
+          </div>
+
+          {/* 4. Última Atualização de Cotação e Fonte */}
+          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1">
+            <div className="flex items-center justify-between text-slate-400">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                4. Última Cotação (B3)
+              </span>
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <strong className="block font-mono text-sm text-white">
+              {lastQuoteFormatted}
+            </strong>
+            <span
+              className={`text-[11px] block font-medium ${
+                diagnostics.monitoring.isFallbackData ? 'text-amber-400' : 'text-emerald-400'
+              }`}
+            >
+              Fonte: {diagnostics.monitoring.quoteSource}
+            </span>
+          </div>
+        </div>
+
+        {diagnostics.permission === 'denied' && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-200 text-xs space-y-1">
+            <strong className="block text-[11px] uppercase tracking-wider text-rose-300">
+              Como desbloquear as notificações no Chrome do Android / Desktop:
+            </strong>
+            <ol className="list-decimal list-inside space-y-0.5 text-[11px]">
+              {diagnostics.instructions.map((step, i) => (
+                <li key={i}>{step.replace(/^\d+\.\s*/, '')}</li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
 
       {/* Guia Explicativo da Aba */}
       <TabGuideBanner
-        title="Como funcionam os Alertas e Notificações?"
-        subtitle="Entenda cada tipo de alerta programável e os 4 estados de monitoramento"
+        title="Como funcionam os Alertas e o Push em Segundo Plano?"
+        subtitle="Entenda os gatilhos monitorados automaticamente pelo servidor"
         items={[
           {
-            term: 'Preço-Teto (Compra)',
+            term: 'Preço-Teto e Preço de Compra',
             meaning:
-              'É o valor máximo que você aceita pagar por uma cota. Quando a cotação atual cai para esse valor ou menos, o alerta muda para ATINGIDO e dispara uma notificação.',
-            example: 'Ex: Preço-teto HGLG11 em R$ 158,00. Se a cota estiver R$ 156,50, o alerta dispara.',
+              'Define o valor máximo que você aceita pagar por uma cota. Quando a cotação na B3 cai para esse valor ou menos, o servidor envia um Push imediato para o seu celular.',
+            example: 'Ex: Preço-teto HGLG11 em R$ 155,00. Se a cota estiver R$ 149,50, o alerta dispara.',
           },
           {
-            term: 'P/VP Máximo (Desconto)',
+            term: 'P/VP Máximo e Provento Mínimo',
             meaning:
-              'Compara o preço da cota com o valor patrimonial dos imóveis (VPA). Um alerta em 1,00 avisa quando o fundo está negociando sem ágio ou com desconto.',
-            example: 'Ex: P/VP <= 0,98 avisa quando o fundo está com pelo menos 2% de desconto.',
+              'Monitora descontos patrimoniais (P/VP <= limite) e rendimentos mensais por cota (R$/cota >= mínimo), além de concentração máxima e DY mínimo da carteira.',
+            example: 'Ex: P/VP <= 1,00 avisa quando o fundo está negociando sem ágio.',
           },
           {
-            term: 'Estados: Ativo, Atingido, Pausado e Com Erro',
+            term: 'Data-Com e Lembretes de Pagamento',
             meaning:
-              'Cada regra exibe claramente se está Monitorando (Ativo), se a condição já foi alcançada (Atingido), se foi temporariamente desativada (Pausado) ou se precisa de revisão (Com Erro).',
-            example: 'Ex: Se um ticker digitado não existir na base, o cartão mostrará "Com Erro" para você corrigir.',
+              'Acompanha novos proventos anunciados, avisa antes da Data-Com e envia lembretes antes das datas de pagamento agendadas.',
+            example: 'Ex: Aviso automático faltando de 1 a 5 dias para o dividendo cair na conta.',
           },
         ]}
       />
@@ -608,7 +815,7 @@ export const AlertsView: React.FC = () => {
               </h2>
               <InfoTooltip
                 title="Cadastro de Alerta"
-                description="Escolha a sigla do FII (ex: HGLG11), o tipo de condição e o valor desejado. O sistema preenche automaticamente o valor atual de mercado para facilitar sua referência."
+                description="Escolha a sigla do FII (ex: HGLG11), o tipo de condição e o valor desejado. O alerta será avaliado em tempo real e pelo servidor automático."
               />
             </div>
 
@@ -665,7 +872,7 @@ export const AlertsView: React.FC = () => {
                     </div>
                   ) : (
                     <span className="font-sans text-[10px] text-amber-300">
-                      Ativo sem cotação na base — adicione-o primeiro na carteira
+                      Ativo fora da base — o servidor consultará na B3 (.SA)
                     </span>
                   )}
                 </div>
@@ -691,13 +898,16 @@ export const AlertsView: React.FC = () => {
                   <option value="PROVENTO_MINIMO">
                     Provento Mínimo (Avisar se R$/cota &gt;= valor)
                   </option>
+                  <option value="PRECO_COMPRA">
+                    Preço Alvo de Compra / Aporte (Avisar se cotação &lt;= valor)
+                  </option>
                 </select>
               </div>
 
               <div>
                 <label className="text-slate-300 font-semibold block mb-1">
-                  {newType === 'PRECO_TETO'
-                    ? 'Preço-Teto Desejado (R$)'
+                  {newType === 'PRECO_TETO' || newType === 'PRECO_COMPRA'
+                    ? 'Preço Limite Desejado (R$)'
                     : newType === 'PVP_MAXIMO'
                     ? 'Múltiplo P/VP Máximo (ex: 1.00)'
                     : 'Provento Mínimo por Cota (R$)'}
@@ -748,7 +958,7 @@ export const AlertsView: React.FC = () => {
               </h2>
               <InfoTooltip
                 title="Limites Automáticos da Carteira"
-                description="Estes parâmetros vigiam todos os fundos da sua carteira simultaneamente e geram Avisos Importantes na Central de Notificações caso algum limite seja ultrapassado."
+                description="Estes parâmetros vigiam todos os fundos da sua carteira simultaneamente no cliente e no servidor, gerando Avisos Importantes e Web Push caso algum limite seja ultrapassado."
               />
             </div>
 
@@ -914,6 +1124,8 @@ export const AlertsView: React.FC = () => {
                           <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 font-medium">
                             {alert.type === 'PRECO_TETO'
                               ? 'Preço-Teto'
+                              : alert.type === 'PRECO_COMPRA'
+                              ? 'Preço de Compra'
                               : alert.type === 'PVP_MAXIMO'
                               ? 'P/VP Máximo'
                               : 'Provento Mínimo'}
@@ -969,7 +1181,7 @@ export const AlertsView: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Painel de Edição Completa (Ticker, Condição e Valor) */}
+                      {/* Painel de Edição Completa */}
                       {isEditingThis && (
                         <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/40 grid grid-cols-1 sm:grid-cols-4 gap-2 items-end text-xs">
                           <div>
@@ -997,6 +1209,7 @@ export const AlertsView: React.FC = () => {
                               <option value="PRECO_TETO">Preço-Teto</option>
                               <option value="PVP_MAXIMO">P/VP Máximo</option>
                               <option value="PROVENTO_MINIMO">Provento Mín.</option>
+                              <option value="PRECO_COMPRA">Preço Compra</option>
                             </select>
                           </div>
                           <div>
@@ -1042,7 +1255,7 @@ export const AlertsView: React.FC = () => {
                           <strong className="text-white">
                             {alert.type === 'PVP_MAXIMO'
                               ? `<= ${alert.thresholdValue.toFixed(2)}`
-                              : alert.type === 'PRECO_TETO'
+                              : alert.type === 'PRECO_TETO' || alert.type === 'PRECO_COMPRA'
                               ? `<= ${formatBRL(alert.thresholdValue)}`
                               : `>= ${formatBRL(alert.thresholdValue)}`}
                           </strong>
@@ -1101,7 +1314,7 @@ export const AlertsView: React.FC = () => {
                     Histórico de Notificações Disparadas ({historyList.length})
                   </h2>
                   <p className="text-[11px] text-slate-400">
-                    Registro auditável de todos os alertas acionados e testes enviados (com bloqueio automático contra duplicidade)
+                    Registro auditável de todos os envios via Web Push em 2º plano, Service Worker e testes reais
                   </p>
                 </div>
               </div>
@@ -1119,10 +1332,10 @@ export const AlertsView: React.FC = () => {
 
             {historyList.length === 0 ? (
               <div className="p-6 text-center text-xs text-slate-400 bg-slate-900/50 rounded-xl border border-slate-800">
-                Nenhum disparo registrado ainda. Clique em <strong>"Testar Notificação Real"</strong> ou <strong>"Ativar notificações"</strong> no topo para testar o envio agora mesmo.
+                Nenhum disparo registrado ainda. Clique em <strong>"Testar Notificação"</strong> ou <strong>"Ativar notificações"</strong> no topo para testar o envio real agora mesmo.
               </div>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {historyList.map((entry) => {
                   const dateFormatted = new Date(entry.timestamp).toLocaleString('pt-BR', {
                     day: '2-digit',
@@ -1131,6 +1344,15 @@ export const AlertsView: React.FC = () => {
                     minute: '2-digit',
                     second: '2-digit',
                   });
+
+                  const channelLabel =
+                    entry.channel === 'web_push_background'
+                      ? 'Web Push (2º Plano)'
+                      : entry.channel === 'service_worker_nativo'
+                      ? 'Service Worker Nativo'
+                      : entry.channel === 'navegador_nativo'
+                      ? 'Navegador Nativo'
+                      : 'Painel Interno';
 
                   return (
                     <div
@@ -1145,13 +1367,17 @@ export const AlertsView: React.FC = () => {
                                 ? 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
                                 : entry.category === 'importante'
                                 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                                : entry.category === 'lembrete'
+                                ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
                                 : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                             }`}
                           >
                             {entry.category === 'teste'
                               ? 'Teste Real'
                               : entry.category === 'importante'
-                              ? 'Risco / Importante'
+                              ? 'Aviso Importante'
+                              : entry.category === 'lembrete'
+                              ? 'Lembrete'
                               : 'Oportunidade'}
                           </span>
                           <strong className="text-white">{entry.title}</strong>
@@ -1161,10 +1387,8 @@ export const AlertsView: React.FC = () => {
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0 text-[10px] font-mono text-slate-400">
                         <span>{dateFormatted}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                          {entry.channel === 'navegador_nativo'
-                            ? 'Navegador + Painel'
-                            : 'Painel em Tempo Real'}
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                          {channelLabel}
                         </span>
                       </div>
                     </div>
@@ -1174,15 +1398,17 @@ export const AlertsView: React.FC = () => {
             )}
           </div>
 
-          {/* Nota Técnica Transparente sobre Notificações com Site Fechado */}
+          {/* Nota Técnica Transparente sobre Web Push no Android */}
           <div className="p-4 rounded-2xl bg-[#0B1221] border border-slate-800/90 flex items-start gap-3 text-xs text-slate-400">
             <Info className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <div className="space-y-1 leading-relaxed">
               <strong className="text-white block">
-                Importante sobre avisos com o navegador fechado:
+                Como garantir 100% de entrega no Android mesmo com o navegador fechado:
               </strong>
               <p>
-                Por segurança dos navegadores modernos, aplicações web pessoais avaliam cotações continuamente enquanto a aba está aberta (enviando notificações via Service Worker e pop-ups da área de trabalho quando autorizadas) e executam uma varredura completa instantânea assim que você abre o EDUMODS FIIs. Nenhum alerta cadastrado é perdido: todos permanecem salvos no seu banco de dados e registrados no histórico acima.
+                1. Abra o site diretamente no <strong>Google Chrome do Android</strong> (fora de janelas incorporadas) e clique em <strong>"Ativar notificações"</strong>.<br />
+                2. No menu do Chrome (3 pontos no canto superior direito), toque em <strong>"Adicionar à tela inicial" / "Instalar aplicativo"</strong> — isso registra o PWA no Android e evita que a economia de bateria suspenda o Service Worker.<br />
+                3. O servidor executa a varredura automática de cotações e dispara alertas via <strong>Web Push criptografado (VAPID)</strong> sem exigir que você deixe a página aberta.
               </p>
             </div>
           </div>

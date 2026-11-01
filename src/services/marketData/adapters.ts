@@ -7,17 +7,39 @@ interface CachedQuoteEntry {
 }
 
 const QUOTE_CACHE: Map<string, CachedQuoteEntry> = new Map();
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos de cache
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutos de cache
 
 export class BrapiAdapter implements IMarketDataAdapter {
   id = 'brapi';
-  name = 'BRAPI (Principal)';
+  name = 'BRAPI & B3 Tempo Real';
   isEnabled = true;
 
   async testConnection(config: { token?: string }): Promise<ConnectionTestResult> {
     const startTime = Date.now();
+    const token = config.token?.trim();
+
+    // 1. Tenta via proxy seguro do servidor (/api/quotes) que suporta BRAPI + B3 Tempo Real (Yahoo SA)
     try {
-      const token = config.token?.trim();
+      const serverUrl = `/api/quotes?tickers=HGLG11${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+      const res = await fetch(serverUrl);
+      if (res.ok) {
+        const data = await res.json();
+        const latencyMs = Date.now() - startTime;
+        if (data && data.quotes && data.quotes.HGLG11 && !data.isFallbackData) {
+          return {
+            success: true,
+            message: `Conexão estabelecida em tempo real (${data.source || 'B3 Oficial'}, ${latencyMs}ms). HGLG11 = R$ ${Number(data.quotes.HGLG11.price).toFixed(2)}.`,
+            latencyMs,
+            assetCount: 1,
+          };
+        }
+      }
+    } catch {
+      // Continua para teste direto BRAPI
+    }
+
+    // 2. Teste direto na BRAPI
+    try {
       const testTicker = 'HGLG11';
       const url = token
         ? `https://brapi.dev/api/quote/${testTicker}?token=${encodeURIComponent(token)}`
@@ -35,7 +57,8 @@ export class BrapiAdapter implements IMarketDataAdapter {
         if (response.status === 401 || response.status === 403) {
           return {
             success: false,
-            message: 'Token inválido ou não autorizado pela BRAPI. Verifique sua chave de API.',
+            message:
+              'A API direta da BRAPI exige token de autenticação para este ativo. O servidor utilizará o feed B3 Tempo Real automático.',
             latencyMs,
           };
         }
@@ -48,7 +71,7 @@ export class BrapiAdapter implements IMarketDataAdapter {
         }
         return {
           success: false,
-          message: `Falha na conexão com BRAPI (HTTP ${response.status}). Modo de contingência com dados locais ativado.`,
+          message: `Falha na conexão com BRAPI (HTTP ${response.status}).`,
           latencyMs,
         };
       }
@@ -75,7 +98,7 @@ export class BrapiAdapter implements IMarketDataAdapter {
         success: false,
         message: isAbort
           ? 'Tempo limite de resposta excedido ao conectar na BRAPI (Timeout de 6s).'
-          : 'Não foi possível contatar o servidor da BRAPI. O sistema utilizará a base verificada local sem interrupção.',
+          : 'Não foi possível contatar o servidor da BRAPI diretamente.',
         latencyMs,
       };
     }
@@ -89,13 +112,13 @@ export class BrapiAdapter implements IMarketDataAdapter {
     const tickersToFetch: string[] = [];
     const now = Date.now();
 
-    // 1. Verifica cache existente
     tickers.forEach((ticker) => {
-      const cached = QUOTE_CACHE.get(ticker.toUpperCase());
+      const clean = ticker.toUpperCase().trim();
+      const cached = QUOTE_CACHE.get(clean);
       if (cached && now - cached.cachedAt < CACHE_TTL_MS) {
-        results[ticker] = cached.quote;
-      } else {
-        tickersToFetch.push(ticker.toUpperCase());
+        results[clean] = cached.quote;
+      } else if (clean) {
+        tickersToFetch.push(clean);
       }
     });
 
@@ -103,43 +126,89 @@ export class BrapiAdapter implements IMarketDataAdapter {
       return results;
     }
 
+    const token = config.token?.trim();
+
+    // 1. Prioridade: Busca pelo servidor backend (/api/quotes) que consulta BRAPI + B3 Tempo Real sem bloqueio CORS
     try {
-      const token = config.token?.trim();
       const tickerQuery = tickersToFetch.join(',');
-      const url = token
-        ? `https://brapi.dev/api/quote/${tickerQuery}?token=${encodeURIComponent(token)}`
-        : `https://brapi.dev/api/quote/${tickerQuery}`;
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
+      const serverUrl = `/api/quotes?tickers=${encodeURIComponent(tickerQuery)}${
+        token ? `&token=${encodeURIComponent(token)}` : ''
+      }`;
+      const response = await fetch(serverUrl);
       if (response.ok) {
         const data = await response.json();
-        if (Array.isArray(data.results)) {
-          data.results.forEach((item: { symbol?: string; regularMarketPrice?: number; regularMarketChangePercent?: number }) => {
-            const sym = item.symbol?.toUpperCase();
-            if (sym && typeof item.regularMarketPrice === 'number' && item.regularMarketPrice > 0) {
+        if (data && data.quotes && typeof data.quotes === 'object') {
+          Object.entries(data.quotes).forEach(([sym, q]: [string, any]) => {
+            if (q && typeof q.price === 'number' && q.price > 0) {
               const quote: MarketQuote = {
-                ticker: sym,
-                price: Number(item.regularMarketPrice.toFixed(2)),
-                changePercent: Number((item.regularMarketChangePercent || 0).toFixed(2)),
-                updatedAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-                source: 'BRAPI Oficial',
+                ticker: sym.toUpperCase(),
+                price: Number(q.price.toFixed(2)),
+                changePercent: Number((q.changePercent || 0).toFixed(2)),
+                updatedAt: q.updatedAt || new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                source: q.source || 'B3 Tempo Real',
+                vpa: q.vpa,
+                lastDividend: q.lastDividend,
               };
-              results[sym] = quote;
-              QUOTE_CACHE.set(sym, { quote, cachedAt: now });
+              results[sym.toUpperCase()] = quote;
+              QUOTE_CACHE.set(sym.toUpperCase(), { quote, cachedAt: now });
             }
           });
         }
       }
     } catch {
-      // Falha silenciosa de rede — preenche com fallback verificado abaixo
+      // Se estiver rodando sem rota /api/quotes, tenta BRAPI direto abaixo
     }
 
-    // 2. Para quaisquer tickers não retornados ou falha de rede, preserva dados verificados da B3
+    const remainingTickers = tickersToFetch.filter((t) => !results[t]);
+
+    // 2. Fallback direto para BRAPI se ainda faltarem ativos
+    if (remainingTickers.length > 0) {
+      try {
+        const tickerQuery = remainingTickers.join(',');
+        const url = token
+          ? `https://brapi.dev/api/quote/${tickerQuery}?token=${encodeURIComponent(token)}`
+          : `https://brapi.dev/api/quote/${tickerQuery}`;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 7000);
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data.results)) {
+            data.results.forEach(
+              (item: {
+                symbol?: string;
+                regularMarketPrice?: number;
+                regularMarketChangePercent?: number;
+              }) => {
+                const sym = item.symbol?.toUpperCase();
+                if (sym && typeof item.regularMarketPrice === 'number' && item.regularMarketPrice > 0) {
+                  const quote: MarketQuote = {
+                    ticker: sym,
+                    price: Number(item.regularMarketPrice.toFixed(2)),
+                    changePercent: Number((item.regularMarketChangePercent || 0).toFixed(2)),
+                    updatedAt: new Date().toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                    source: 'BRAPI Oficial',
+                  };
+                  results[sym] = quote;
+                  QUOTE_CACHE.set(sym, { quote, cachedAt: now });
+                }
+              }
+            );
+          }
+        }
+      } catch {
+        // Continua para contingência local informada
+      }
+    }
+
+    // 3. Contingência local transparente (informa explicitamente que é base de contingência)
     tickersToFetch.forEach((ticker) => {
       if (!results[ticker]) {
         const local = VERIFIED_FII_DATABASE[ticker];
@@ -147,14 +216,13 @@ export class BrapiAdapter implements IMarketDataAdapter {
           const fallbackQuote: MarketQuote = {
             ticker,
             price: local.currentPrice,
-            changePercent: 0.15,
-            updatedAt: 'Base B3 Verificada',
-            source: 'B3 Oficial / Local',
+            changePercent: 0,
+            updatedAt: 'Contingência Local',
+            source: 'Contingência Local (Sem Conexão Externa)',
             vpa: local.vpa,
             lastDividend: local.lastDividend,
           };
           results[ticker] = fallbackQuote;
-          QUOTE_CACHE.set(ticker, { quote: fallbackQuote, cachedAt: now });
         }
       }
     });
@@ -210,7 +278,6 @@ export class CustomOptionalAdapter implements IMarketDataAdapter {
   }
 
   async fetchQuotes(): Promise<Record<string, MarketQuote>> {
-    // Provedor opcional permanece desativado até ser ativamente configurado
     return {};
   }
 }

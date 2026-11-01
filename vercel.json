@@ -1,0 +1,14 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monitor",
+      "schedule": "0 13,17,21 * * 1-5"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/|sw\\.js|manifest\\.json|icon\\.svg|pwa-.*\\.png|apple-touch-icon\\.png|supabase-.*\\.sql).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
