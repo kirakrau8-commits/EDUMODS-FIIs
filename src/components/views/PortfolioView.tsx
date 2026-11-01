@@ -2,26 +2,25 @@ import React, { useState } from 'react';
 import {
   PlusCircle,
   Search,
-  Filter,
   Star,
   Edit2,
-  TrendingUp,
-  TrendingDown,
   ArrowDownRight,
   ArrowUpRight,
-  HelpCircle,
   Check,
   Building,
-  ExternalLink,
   FileDown,
+  Trash2,
+  X,
+  RotateCcw,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatPercent } from '../../utils/formatters';
-import { FIICategory, FIIHolding, OperationType } from '../../types/fii';
+import { FIIHolding, OperationType } from '../../types/fii';
 import { AppModuleId } from '../layout/Sidebar';
 import { EditHoldingModal } from '../modals/EditHoldingModal';
 import { generatePortfolioPDFReport } from '../../utils/pdfExport';
 import { useAuth } from '../../context/AuthContext';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 interface PortfolioViewProps {
   onOpenTransactionModal: (ticker?: string, type?: OperationType) => void;
@@ -46,6 +45,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     updateHoldingNotes,
     updateHoldingTargetWeight,
     toggleFavorite,
+    deleteHolding,
+    resetPortfolioToDemo,
     dividends,
   } = usePortfolio();
   const { user } = useAuth();
@@ -75,6 +76,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
   const [editingTargetTicker, setEditingTargetTicker] = useState<string | null>(null);
   const [tempTarget, setTempTarget] = useState<string>('');
   const [selectedHoldingToEdit, setSelectedHoldingToEdit] = useState<FIIHolding | null>(null);
+  const [confirmDeleteTicker, setConfirmDeleteTicker] = useState<string | null>(null);
+  const [deletingTicker, setDeletingTicker] = useState<string | null>(null);
 
   // Filtros
   const filteredHoldings = holdings.filter((h) => {
@@ -96,8 +99,8 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     setTempNotes(h.notes || '');
   };
 
-  const handleSaveNotes = (ticker: string) => {
-    updateHoldingNotes(ticker, tempNotes);
+  const handleSaveNotes = async (ticker: string) => {
+    await updateHoldingNotes(ticker, tempNotes);
     setEditingNotesTicker(null);
   };
 
@@ -106,12 +109,22 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
     setTempTarget(String(h.targetWeight || 10));
   };
 
-  const handleSaveTarget = (ticker: string) => {
+  const handleSaveTarget = async (ticker: string) => {
     const num = parseFloat(tempTarget);
     if (!isNaN(num) && num >= 0) {
-      updateHoldingTargetWeight(ticker, num);
+      await updateHoldingTargetWeight(ticker, num);
     }
     setEditingTargetTicker(null);
+  };
+
+  const handleConfirmDeleteHolding = async (ticker: string) => {
+    setDeletingTicker(ticker);
+    try {
+      await deleteHolding(ticker);
+      setConfirmDeleteTicker(null);
+    } finally {
+      setDeletingTicker(null);
+    }
   };
 
   const isProfit = totalUnrealizedGain >= 0;
@@ -135,7 +148,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             </h1>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => onOpenTransactionModal('', 'COMPRA')}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.02]"
@@ -163,48 +176,84 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
         {/* Métricas Principais em Faixa */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-3 border-t border-slate-800/80">
           <div>
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">Patrimônio Atual</span>
-            <div className="text-base sm:text-lg font-extrabold text-white font-mono mt-0.5">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase flex items-center gap-1">
+              Patrimônio Atual
+              <InfoTooltip
+                title="Patrimônio Atual"
+                description="Quanto valem todas as suas cotas somadas na cotação de hoje da B3."
+                align="left"
+              />
+            </span>
+            <div className="text-base sm:text-lg font-extrabold text-white font-mono mt-0.5 tabular-nums">
               {formatBRL(totalMarketValue, preferences.hideValues)}
             </div>
           </div>
 
           <div>
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">Total Investido</span>
-            <div className="text-base sm:text-lg font-bold text-slate-300 font-mono mt-0.5">
+            <span className="text-[11px] font-semibold text-slate-400 uppercase flex items-center gap-1">
+              Total Investido
+              <InfoTooltip
+                title="Total Investido"
+                description="Soma do dinheiro que saiu do seu bolso (Quantidade × Preço Médio de cada fundo)."
+              />
+            </span>
+            <div className="text-base sm:text-lg font-bold text-slate-300 font-mono mt-0.5 tabular-nums">
               {formatBRL(totalInvested, preferences.hideValues)}
             </div>
           </div>
 
           <div>
             <span className="text-[11px] font-semibold text-slate-400 uppercase">Lucro / Prejuízo</span>
-            <div className={`text-base sm:text-lg font-extrabold font-mono mt-0.5 ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <div className={`text-base sm:text-lg font-extrabold font-mono mt-0.5 tabular-nums ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formatBRL(totalUnrealizedGain, preferences.hideValues, true)}
             </div>
           </div>
 
           <div>
             <span className="text-[11px] font-semibold text-slate-400 uppercase">Rentabilidade</span>
-            <div className={`text-base sm:text-lg font-extrabold font-mono mt-0.5 ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <div className={`text-base sm:text-lg font-extrabold font-mono mt-0.5 tabular-nums ${isProfit ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formatPercent(totalUnrealizedGainPercent, true)}
             </div>
           </div>
 
           <div>
             <span className="text-[11px] font-semibold text-slate-400 uppercase">Proventos do Mês</span>
-            <div className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5">
+            <div className="text-base sm:text-lg font-bold text-emerald-400 font-mono mt-0.5 tabular-nums">
               {formatBRL(monthlyDividendsReceived + monthlyDividendsForecasted, preferences.hideValues)}
             </div>
           </div>
 
           <div>
             <span className="text-[11px] font-semibold text-slate-400 uppercase">Média Mensal (3m)</span>
-            <div className="text-base sm:text-lg font-bold text-blue-400 font-mono mt-0.5">
+            <div className="text-base sm:text-lg font-bold text-blue-400 font-mono mt-0.5 tabular-nums">
               {formatBRL(averageMonthlyDividends.last3Months, preferences.hideValues)}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Guia Explicativo da Aba Minha Carteira */}
+      <TabGuideBanner
+        title="Como gerenciar os fundos da sua Carteira?"
+        subtitle="Entenda os indicadores de cada cartão e como editar, comprar, vender ou anotar"
+        items={[
+          {
+            term: 'Preço Médio vs. Cotação Atual',
+            meaning:
+              'Preço Médio é quanto você pagou por cota em média. Cotação Atual é o preço hoje na B3. Quando a Cotação é maior que o Preço Médio, você tem lucro na valorização.',
+          },
+          {
+            term: 'Peso na Carteira vs. Meta de Alocação',
+            meaning:
+              'Peso mostra quantos % do seu dinheiro está naquele fundo hoje. Meta de Alocação é o percentual ideal que você definiu (clique no lápis para alterar).',
+          },
+          {
+            term: 'Botões Comprar, Vender, Editar e Excluir',
+            meaning:
+              'Use "Comprar" ou "Vender" para lançar novas ordens, "Editar" para corrigir quantidade/preço médio diretamente, ou a lixeira para remover o ativo.',
+          },
+        ]}
+      />
 
       {/* Barra de Filtros e Busca */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#0F172A] border border-slate-800">
@@ -248,18 +297,30 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
             <p className="text-xs max-w-md mx-auto">
               Nenhum ativo corresponde aos filtros selecionados ou sua carteira ainda não possui registros.
             </p>
-            <button
-              onClick={() => onOpenTransactionModal('', 'COMPRA')}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg"
-            >
-              Adicionar Primeiro Fundo
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+              <button
+                onClick={() => onOpenTransactionModal('', 'COMPRA')}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg"
+              >
+                Adicionar Primeiro Fundo
+              </button>
+              {holdings.length === 0 && (
+                <button
+                  onClick={() => resetPortfolioToDemo()}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Carregar Carteira Demonstrativa</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           filteredHoldings.map((h) => {
             const isItemProfit = h.unrealizedGain >= 0;
             const isEditingNotes = editingNotesTicker === h.ticker;
             const isEditingTarget = editingTargetTicker === h.ticker;
+            const isConfirmingDelete = confirmDeleteTicker === h.ticker;
 
             return (
               <div
@@ -305,8 +366,43 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Botões Operacionais com Lápis de Edição */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                  {/* Botões Operacionais com Lápis de Edição e Exclusão Direta */}
+                  <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+                    {isConfirmingDelete ? (
+                      <div className="flex items-center gap-1.5 bg-rose-950/80 border border-rose-500/40 px-2.5 py-1 rounded-xl">
+                        <span className="text-[11px] text-rose-200 font-semibold">
+                          Excluir {h.ticker}?
+                        </span>
+                        <button
+                          type="button"
+                          disabled={deletingTicker === h.ticker}
+                          onClick={() => handleConfirmDeleteHolding(h.ticker)}
+                          className="px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold"
+                        >
+                          {deletingTicker === h.ticker ? '...' : 'Confirmar'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingTicker === h.ticker}
+                          onClick={() => setConfirmDeleteTicker(null)}
+                          className="p-0.5 text-slate-400 hover:text-white"
+                          aria-label="Cancelar exclusão"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteTicker(h.ticker)}
+                        className="p-1.5 rounded-lg bg-slate-800/90 hover:bg-rose-500/15 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30 transition-all"
+                        title={`Excluir ${h.ticker} da carteira`}
+                        aria-label={`Excluir ${h.ticker}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     <button
                       onClick={() => setSelectedHoldingToEdit(h)}
                       className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold transition-all"

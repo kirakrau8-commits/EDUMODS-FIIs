@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Database, Download, Upload, FileText, CheckCircle2, AlertCircle, Save, FileDown, ShieldCheck } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { generatePortfolioPDFReport } from '../../utils/pdfExport';
-import { useAuth } from '../../context/AuthContext';
 
 export const BackupView: React.FC = () => {
   const {
+    currentUser,
     exportDataJSON,
     exportTransactionsCSV,
     importDataJSON,
@@ -21,11 +21,16 @@ export const BackupView: React.FC = () => {
     monthlyDividendsReceived,
     monthlyDividendsForecasted,
   } = usePortfolio();
-  const { user } = useAuth();
 
   const [importStatus, setImportStatus] = useState<{ success: boolean; message: string } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
   const [generalNotes, setGeneralNotes] = useState(notes.geral || '');
   const [notesSaved, setNotesSaved] = useState(false);
+
+  // Sincroniza o campo de notas gerais quando os dados carregam
+  useEffect(() => {
+    setGeneralNotes(notes.geral || '');
+  }, [notes.geral]);
 
   const handleDownloadJSON = () => {
     const jsonStr = exportDataJSON();
@@ -53,7 +58,7 @@ export const BackupView: React.FC = () => {
 
   const handleExportPDF = () => {
     generatePortfolioPDFReport({
-      user: { email: user?.email || 'investidor@edumods.com' },
+      user: { email: currentUser.name || 'Uso Pessoal EDUMODS FIIs' },
       holdings,
       dividends,
       goals,
@@ -72,18 +77,31 @@ export const BackupView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const inputElement = e.target;
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
-      const res = importDataJSON(content);
-      setImportStatus(res);
-      setTimeout(() => setImportStatus(null), 5000);
+      setIsImporting(true);
+      setImportStatus(null);
+      try {
+        const res = await importDataJSON(content);
+        setImportStatus(res);
+      } catch (err: any) {
+        setImportStatus({
+          success: false,
+          message: err?.message || 'Erro ao importar arquivo JSON.',
+        });
+      } finally {
+        setIsImporting(false);
+        inputElement.value = '';
+        setTimeout(() => setImportStatus(null), 6000);
+      }
     };
     reader.readAsText(file);
   };
 
-  const handleSaveGeneralNotes = () => {
-    updateHoldingNotes('geral', generalNotes);
+  const handleSaveGeneralNotes = async () => {
+    await updateHoldingNotes('geral', generalNotes);
     setNotesSaved(true);
     setTimeout(() => setNotesSaved(false), 3000);
   };
@@ -100,7 +118,7 @@ export const BackupView: React.FC = () => {
           Backup, Exportação & Notas Estratégicas
         </h1>
         <p className="text-xs text-slate-400 max-w-2xl">
-          Exporte seus dados em JSON ou CSV para custódia offline e restaure seus dados a qualquer momento com integridade garantida.
+          Exporte seus dados em JSON, CSV ou PDF para custódia offline e restaure sua carteira a qualquer momento com integridade garantida.
         </p>
       </div>
 
@@ -154,12 +172,17 @@ export const BackupView: React.FC = () => {
                 Carregue um arquivo JSON gerado previamente pelo EDUMODS FIIs. Os dados atuais serão substituídos com validação prévia.
               </p>
               <div>
-                <label className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg border border-slate-700 cursor-pointer w-fit transition-colors">
+                <label
+                  className={`flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg border border-slate-700 w-fit transition-colors ${
+                    isImporting ? 'opacity-60 cursor-wait' : 'cursor-pointer'
+                  }`}
+                >
                   <Upload className="w-4 h-4 text-emerald-400" />
-                  <span>Selecionar Arquivo JSON</span>
+                  <span>{isImporting ? 'Restaurando dados...' : 'Selecionar Arquivo JSON'}</span>
                   <input
                     type="file"
                     accept=".json"
+                    disabled={isImporting}
                     onChange={handleFileImport}
                     className="hidden"
                   />
@@ -199,7 +222,7 @@ export const BackupView: React.FC = () => {
               {notesSaved && (
                 <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Salvo!
+                  Notas Salvas!
                 </span>
               )}
             </div>
@@ -227,34 +250,34 @@ export const BackupView: React.FC = () => {
         </div>
       </div>
 
-      {/* Painel Informativo de Persistência Supabase Auth & RLS */}
+      {/* Painel Informativo de Persistência Pessoal */}
       <div className="p-6 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-3 shadow-lg">
         <div className="flex items-center gap-2 text-emerald-400">
           <ShieldCheck className="w-5 h-5" />
           <h2 className="text-sm font-bold text-white uppercase tracking-wider">
-            Arquitetura de Dados: Supabase Auth & Row Level Security (RLS)
+            Arquitetura de Persistência Pessoal (Local + Supabase Database)
           </h2>
         </div>
         <p className="text-xs text-slate-400 leading-relaxed">
-          O sistema opera com autenticação obrigatória via <strong>Supabase Auth</strong>. O acesso só é liberado para investidores previamente cadastrados e autorizados.
+          O sistema opera em modo de uso pessoal direto, sem necessidade de login. Todas as alterações na carteira, operações, dividendos, metas e notas são gravadas imediatamente no navegador e sincronizadas com o banco de dados Supabase.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 text-xs">
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-            <span className="font-semibold text-emerald-400 block">1. Autenticação Segura</span>
+            <span className="font-semibold text-emerald-400 block">1. Acesso Direto Imediato</span>
             <span className="text-slate-400 text-[11px] block">
-              Sessões JWT protegidas com chave pública / anon. Chaves secretas ou service_role nunca são expostas no frontend.
+              Sem telas de login ou expiração de sessão. Basta abrir o endereço da aplicação para gerenciar sua carteira.
             </span>
           </div>
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-            <span className="font-semibold text-blue-400 block">2. Isolamento de Dados</span>
+            <span className="font-semibold text-blue-400 block">2. Gravação Instantânea</span>
             <span className="text-slate-400 text-[11px] block">
-              Cache e preferências salvos com chave isolada por usuário. Os dados de um investidor nunca vazam para outra conta.
+              Os dados permanecem salvos ao fechar o navegador ou atualizar a página (F5), com armazenamento local e em nuvem.
             </span>
           </div>
           <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
-            <span className="font-semibold text-purple-400 block">3. Políticas RLS na Nuvem</span>
+            <span className="font-semibold text-purple-400 block">3. Backup Portátil</span>
             <span className="text-slate-400 text-[11px] block">
-              O arquivo <code>supabase-schema.sql</code> na raiz contém as tabelas e regras RLS prontas para replicação em nuvem.
+              Exporte ou restaure sua carteira completa em JSON, CSV ou PDF a qualquer momento com um único clique.
             </span>
           </div>
         </div>

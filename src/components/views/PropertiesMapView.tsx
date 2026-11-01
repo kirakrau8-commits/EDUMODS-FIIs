@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MapPin, Building, Info } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL } from '../../utils/formatters';
+import { TabGuideBanner } from '../common/InfoTooltip';
 
 export const PropertiesMapView: React.FC = () => {
   const { holdings, preferences } = usePortfolio();
@@ -63,6 +64,25 @@ export const PropertiesMapView: React.FC = () => {
           Visualize a concentração geográfica dos galpões logísticos, shoppings centers e lajes corporativas da sua carteira por unidade federativa.
         </p>
       </div>
+
+      <TabGuideBanner
+        title="Por que acompanhar a localização dos imóveis?"
+        subtitle="Veja em quais estados brasileiros estão os galpões, shoppings e prédios comerciais que geram os seus aluguéis."
+        items={[
+          {
+            term: 'Eixo Econômico & Logístico',
+            definition: 'Estados como SP, MG, SC e RJ concentram os maiores centros de distribuição de e-commerce e sedes corporativas, garantindo menor vacância.',
+          },
+          {
+            term: 'Diversificação Geográfica',
+            definition: 'Ter imóveis espalhados por várias regiões do Brasil protege sua carteira contra crises econômicas locais ou mudanças tributárias estaduais.',
+          },
+          {
+            term: 'FIIs de Tijolo e Híbridos',
+            definition: 'Apenas fundos que possuem imóveis físicos aparecem neste mapa. Fundos de Papel (CRIs) não entram no cálculo geográfico direto.',
+          },
+        ]}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Seletor de Estados */}

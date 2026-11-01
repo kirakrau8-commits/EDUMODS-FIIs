@@ -24,6 +24,7 @@ import { formatBRL, formatPercent, formatDateBR } from '../../utils/formatters';
 import { AppModuleId } from '../layout/Sidebar';
 import { FIIHolding } from '../../types/fii';
 import { EditHoldingModal } from '../modals/EditHoldingModal';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 interface DashboardViewProps {
   onNavigate: (module: AppModuleId) => void;
@@ -120,6 +121,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Guia Explicativo do Painel Principal */}
+      <TabGuideBanner
+        title="Bem-vindo ao seu Painel Geral de Fundos Imobiliários"
+        subtitle="Entenda em 30 segundos o que cada bloco desta tela mostra"
+        items={[
+          {
+            term: 'Patrimônio em FIIs vs. Total Investido',
+            meaning:
+              'Total Investido é quanto saiu do seu bolso. Patrimônio em FIIs é quanto suas cotas valem hoje na Bolsa. A diferença é seu lucro ou oscilação no papel.',
+          },
+          {
+            term: 'Proventos Recebidos e Previstos',
+            meaning:
+              'Mostra os aluguéis mensais que já caíram na sua conta e os pagamentos já anunciados pelos fundos para os próximos dias.',
+          },
+          {
+            term: 'Como Adicionar ou Editar um FII',
+            meaning:
+              'Clique em "+ Nova Operação" no topo para registrar uma compra/venda, ou clique no ícone de lápis em qualquer fundo da tabela abaixo para ajustar sua posição.',
+          },
+        ]}
+      />
+
       {/* Grid Principal de Cards Financeiros */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Patrimônio Total em FIIs */}
@@ -128,7 +152,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           className="p-5 rounded-2xl bg-[#0F172A] border border-slate-800 hover:border-emerald-500/40 transition-all cursor-pointer group shadow-lg"
         >
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Patrimônio em FIIs</span>
+            <span className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              <span>Patrimônio em FIIs</span>
+              <InfoTooltip
+                title="Patrimônio Atual"
+                description="Soma do valor atual de mercado de todas as suas cotas (Quantidade × Cotação Atual na B3)."
+                align="left"
+              />
+            </span>
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Wallet className="w-4 h-4" />
             </div>

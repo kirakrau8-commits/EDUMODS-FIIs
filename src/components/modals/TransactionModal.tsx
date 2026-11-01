@@ -1,10 +1,11 @@
-import React, { useState, useId } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { X, ArrowDownRight, ArrowUpRight, Calculator, AlertCircle, Check } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { OperationType } from '../../types/fii';
 import { VERIFIED_FII_DATABASE } from '../../data/fiiDatabase';
 import { calculateWeightedAveragePrice, calculateSaleResult } from '../../utils/financialMath';
 import { formatBRL } from '../../utils/formatters';
+import { InfoTooltip } from '../common/InfoTooltip';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -31,19 +32,48 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const cleanDefaultTicker = defaultTicker.toUpperCase().trim();
+    setType(defaultType);
+    setTicker(cleanDefaultTicker);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (cleanDefaultTicker) {
+      const existing = holdings.find((h) => h.ticker.toUpperCase() === cleanDefaultTicker);
+      const dbItem = VERIFIED_FII_DATABASE[cleanDefaultTicker];
+      if (existing && existing.currentPrice > 0) {
+        setPrice(existing.currentPrice.toFixed(2));
+      } else if (dbItem && dbItem.currentPrice > 0) {
+        setPrice(dbItem.currentPrice.toFixed(2));
+      }
+    }
+  }, [isOpen, defaultTicker, defaultType, holdings]);
+
   const numQty = parseFloat(quantity) || 0;
   const numPrice = parseFloat(price) || 0;
   const numFees = parseFloat(fees) || 0;
 
   const currentHolding = holdings.find((h) => h.ticker.toUpperCase() === ticker.toUpperCase().trim());
 
-  // Auto-preencher preço caso ticker seja selecionado e preço seja default
   const handleSelectTicker = (selectedTicker: string) => {
     setTicker(selectedTicker);
     const dbItem = VERIFIED_FII_DATABASE[selectedTicker];
     if (dbItem) {
       setPrice(dbItem.currentPrice.toFixed(2));
     }
+  };
+
+  const operationHelpText: Record<OperationType, string> = {
+    COMPRA:
+      'Registra aquisição de novas cotas na Bolsa. Aumenta seu saldo e recalcula seu Preço Médio.',
+    VENDA:
+      'Registra venda de cotas que você possui. Mantém o Preço Médio e calcula seu lucro/prejuízo.',
+    SUBSCRICAO:
+      'Compra de novas cotas diretamente na oferta de emissão do fundo por um preço fixado.',
+    AMORTIZACAO:
+      'Devolução parcial de capital pelo fundo aos cotistas, abatendo o custo investido.',
   };
 
   // Simulação dinâmica
@@ -57,16 +87,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         simulationInfo = (
           <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
             <div className="flex justify-between text-slate-300">
-              <span>Novo Saldo:</span>
-              <strong className="text-white">{res.newQuantity} cotas</strong>
+              <span>Novo Saldo após a operação:</span>
+              <strong className="text-white font-mono">{res.newQuantity} cotas</strong>
             </div>
             <div className="flex justify-between text-slate-300">
-              <span>Novo Preço Médio:</span>
+              <span>Novo Preço Médio Ponderado:</span>
               <strong className="text-emerald-400 font-mono">{formatBRL(res.newAveragePrice)}</strong>
             </div>
             <div className="flex justify-between text-slate-400 text-[11px]">
-              <span>Custo Total do Aporte:</span>
-              <span>{formatBRL(numQty * numPrice + numFees)}</span>
+              <span>Valor Total da Ordem:</span>
+              <span className="font-mono">{formatBRL(numQty * numPrice + numFees)}</span>
             </div>
           </div>
         );
@@ -91,17 +121,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-xs space-y-1">
               <div className="flex justify-between text-slate-300">
                 <span>Saldo Restante:</span>
-                <strong className="text-white">{res.remainingQuantity} cotas</strong>
+                <strong className="text-white font-mono">{res.remainingQuantity} cotas</strong>
               </div>
               <div className="flex justify-between text-slate-300">
-                <span>Resultado Realizado:</span>
+                <span>Resultado Realizado (Lucro/Prej.):</span>
                 <strong className={isProfit ? 'text-emerald-400 font-mono' : 'text-rose-400 font-mono'}>
                   {formatBRL(res.realizedResult, false, true)}
                 </strong>
               </div>
               <div className="flex justify-between text-slate-400 text-[11px]">
                 <span>Preço Médio Restante (mantido):</span>
-                <span>{formatBRL(res.averagePrice)}</span>
+                <span className="font-mono">{formatBRL(res.averagePrice)}</span>
               </div>
             </div>
           );
@@ -112,7 +142,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
@@ -131,7 +161,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
-    const res = addTransaction({
+    const res = await addTransaction({
       ticker: cleanTicker,
       type,
       date,
@@ -146,11 +176,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       return;
     }
 
-    setSuccessMsg('Operação registrada com sucesso!');
+    setSuccessMsg('Operação registrada e salva na carteira!');
     setTimeout(() => {
       setSuccessMsg(null);
       onClose();
-    }, 1200);
+    }, 900);
   };
 
   const tickerListId = useId();
@@ -164,7 +194,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-[#090D16]">
           <div className="flex items-center gap-2">
             <Calculator className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-base font-bold text-white">Registrar Operação</h2>
+            <h2 className="text-base font-bold text-white">Registrar Operação em FII</h2>
           </div>
           <button
             onClick={onClose}
@@ -193,7 +223,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Tipo de Operação */}
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Tipo de Movimentação</label>
+            <label className="text-xs font-semibold text-slate-300 block">
+              1. Escolha o Tipo de Movimentação
+            </label>
             <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-900 rounded-xl border border-slate-800">
               {(['COMPRA', 'VENDA', 'SUBSCRICAO', 'AMORTIZACAO'] as OperationType[]).map((op) => {
                 const isActive = type === op;
@@ -217,12 +249,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 );
               })}
             </div>
+            <p className="text-[11px] text-slate-400">{operationHelpText[type]}</p>
           </div>
 
           {/* Ticker & Data */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label htmlFor="ticker-input" className="text-xs font-medium text-slate-300">Ticker do Fundo</label>
+              <label htmlFor="ticker-input" className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                <span>2. Sigla do Fundo (Ticker)</span>
+                <InfoTooltip
+                  title="Ticker do FII"
+                  description="Código de 4 letras + 11 (ex: HGLG11, MXRF11). Ao selecionar um FII da lista, o preço atual é preenchido automaticamente."
+                />
+              </label>
               <input
                 id="ticker-input"
                 type="text"
@@ -241,7 +280,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="date-input" className="text-xs font-medium text-slate-300">Data da Operação</label>
+              <label htmlFor="date-input" className="text-xs font-medium text-slate-300 block">
+                3. Data da Operação
+              </label>
               <input
                 id="date-input"
                 type="date"
@@ -256,7 +297,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {/* Quantidade e Preço Unitário */}
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label htmlFor="quantity-input" className="text-xs font-medium text-slate-300">Quantidade</label>
+              <label htmlFor="quantity-input" className="text-xs font-medium text-slate-300 block">
+                4. Quantidade
+              </label>
               <input
                 id="quantity-input"
                 type="number"
@@ -270,7 +313,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="price-input" className="text-xs font-medium text-slate-300">Preço Unitário (R$)</label>
+              <label htmlFor="price-input" className="text-xs font-medium text-slate-300 block">
+                5. Preço por Cota (R$)
+              </label>
               <input
                 id="price-input"
                 type="number"
@@ -284,7 +329,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label htmlFor="fees-input" className="text-xs font-medium text-slate-300">Taxas (R$)</label>
+              <label htmlFor="fees-input" className="text-xs font-medium text-slate-300 flex items-center justify-between">
+                <span>6. Taxas (R$)</span>
+                <InfoTooltip
+                  title="Taxas e Emolumentos"
+                  description="Taxa da B3 ou corretagem cobrada na nota (se a corretora for taxa zero, deixe 0.00)."
+                  align="right"
+                />
+              </label>
               <input
                 id="fees-input"
                 type="number"
@@ -299,13 +351,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Notas Pessoais */}
           <div className="space-y-1">
-            <label htmlFor="notes-input" className="text-xs font-medium text-slate-300">Observações / Motivo</label>
+            <label htmlFor="notes-input" className="text-xs font-medium text-slate-300 block">
+              7. Observações (Opcional)
+            </label>
             <input
               id="notes-input"
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Aporte mensal planejado ou Rebalanceamento"
+              placeholder="Ex: Aporte mensal planejado ou Reinvestimento de dividendos"
               className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-hidden focus:border-emerald-500"
             />
           </div>

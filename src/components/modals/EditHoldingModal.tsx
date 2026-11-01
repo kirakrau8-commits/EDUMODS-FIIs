@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit3, Trash2, Check, AlertCircle } from 'lucide-react';
+import { X, Edit3, Trash2, Check } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { FIIHolding } from '../../types/fii';
-import { formatBRL } from '../../utils/formatters';
 
 interface EditHoldingModalProps {
   holding: FIIHolding | null;
@@ -20,28 +19,37 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
   const [quantity, setQuantity] = useState<string>('');
   const [averagePrice, setAveragePrice] = useState<string>('');
   const [currentPrice, setCurrentPrice] = useState<string>('');
+  const [vpa, setVpa] = useState<string>('');
+  const [monthlyYieldPerShare, setMonthlyYieldPerShare] = useState<string>('');
   const [targetWeight, setTargetWeight] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
     if (holding) {
       setQuantity(String(holding.quantity));
       setAveragePrice(String(holding.averagePrice));
       setCurrentPrice(String(holding.currentPrice));
-      setTargetWeight(String(holding.targetWeight || 10));
+      setVpa(String(holding.vpa || holding.currentPrice));
+      setMonthlyYieldPerShare(String(holding.monthlyYieldPerShare || 0.8));
+      setTargetWeight(String(holding.targetWeight ?? 10));
       setNotes(holding.notes || '');
       setFeedback(null);
+      setConfirmDelete(false);
     }
   }, [holding]);
 
   if (!isOpen || !holding) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = parseFloat(quantity);
     const avg = parseFloat(averagePrice);
     const cur = parseFloat(currentPrice);
+    const parsedVpa = parseFloat(vpa);
+    const parsedDiv = parseFloat(monthlyYieldPerShare);
     const tw = parseFloat(targetWeight);
 
     if (isNaN(q) || q < 0) {
@@ -57,25 +65,37 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
       return;
     }
 
-    updateHolding(holding.ticker, {
-      quantity: q,
-      averagePrice: avg,
-      currentPrice: cur,
-      targetWeight: isNaN(tw) ? 10 : tw,
-      notes: notes.trim(),
-    });
+    setIsSaving(true);
+    try {
+      await updateHolding(holding.ticker, {
+        quantity: q,
+        averagePrice: avg,
+        currentPrice: cur,
+        vpa: !isNaN(parsedVpa) && parsedVpa > 0 ? parsedVpa : holding.vpa,
+        monthlyYieldPerShare:
+          !isNaN(parsedDiv) && parsedDiv >= 0 ? parsedDiv : holding.monthlyYieldPerShare,
+        targetWeight: isNaN(tw) ? 10 : tw,
+        notes: notes.trim(),
+      });
 
-    setFeedback('Posição atualizada com sucesso!');
-    setTimeout(() => {
-      setFeedback(null);
-      onClose();
-    }, 600);
+      setFeedback('Posição sincronizada no Supabase com sucesso!');
+      setTimeout(() => {
+        setFeedback(null);
+        onClose();
+      }, 450);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    if (window.confirm(`Tem certeza que deseja remover o fundo ${holding.ticker} da carteira?`)) {
-      deleteHolding(holding.ticker);
+  const handleConfirmDelete = async () => {
+    setIsSaving(true);
+    try {
+      await deleteHolding(holding.ticker);
+      setConfirmDelete(false);
       onClose();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -165,6 +185,32 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-slate-300 font-semibold block mb-1">VPA Patrimonial (R$)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={vpa}
+                onChange={(e) => setVpa(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-hidden focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-slate-300 font-semibold block mb-1">Último Dividendo / Cota (R$)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={monthlyYieldPerShare}
+                onChange={(e) => setMonthlyYieldPerShare(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-sm focus:outline-hidden focus:border-emerald-500"
+              />
+            </div>
+          </div>
+
           <div>
             <label className="text-slate-300 font-semibold block mb-1">Observações Pessoais</label>
             <textarea
@@ -176,32 +222,61 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
             />
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg flex items-center gap-1 transition-colors"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Excluir Posição</span>
-            </button>
-
-            <div className="flex items-center gap-2">
+          {confirmDelete ? (
+            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 space-y-2">
+              <p className="text-rose-200 font-semibold">
+                Confirmar exclusão permanente de <span className="font-mono">{holding.ticker}</span> do Supabase?
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleConfirmDelete}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                >
+                  {isSaving ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
               <button
                 type="button"
-                onClick={onClose}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                disabled={isSaving}
+                onClick={() => setConfirmDelete(true)}
+                className="px-3 py-1.5 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg flex items-center gap-1 transition-colors"
               >
-                Cancelar
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir Posição</span>
               </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-colors"
-              >
-                Salvar Alterações
-              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-colors"
+                >
+                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </form>
       </div>
     </div>

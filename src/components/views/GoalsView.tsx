@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Target, Flame, Edit2, Check, Sparkles, TrendingUp, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Target, Flame, Edit2, Check, TrendingUp, ShieldCheck } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
-import { formatBRL, formatPercent } from '../../utils/formatters';
+import { formatBRL } from '../../utils/formatters';
 import { calculateFIREProgress } from '../../utils/financialMath';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 export const GoalsView: React.FC = () => {
   const {
@@ -20,6 +21,15 @@ export const GoalsView: React.FC = () => {
   const [livingExpenses, setLivingExpenses] = useState(String(goals.currentLivingExpenses));
   const [fireYield, setFireYield] = useState(String(goals.fireSafeYieldPercent));
 
+  useEffect(() => {
+    if (!isEditing) {
+      setIncomeGoal(String(goals.monthlyIncomeGoal));
+      setEquityGoal(String(goals.totalEquityGoal));
+      setLivingExpenses(String(goals.currentLivingExpenses));
+      setFireYield(String(goals.fireSafeYieldPercent));
+    }
+  }, [goals, isEditing]);
+
   const currentMonthlyIncome = monthlyDividendsReceived + monthlyDividendsForecasted;
 
   const fireData = calculateFIREProgress(
@@ -29,8 +39,8 @@ export const GoalsView: React.FC = () => {
     currentMonthlyIncome
   );
 
-  const handleSave = () => {
-    updateGoals({
+  const handleSave = async () => {
+    await updateGoals({
       monthlyIncomeGoal: parseFloat(incomeGoal) || goals.monthlyIncomeGoal,
       totalEquityGoal: parseFloat(equityGoal) || goals.totalEquityGoal,
       currentLivingExpenses: parseFloat(livingExpenses) || goals.currentLivingExpenses,
@@ -39,8 +49,14 @@ export const GoalsView: React.FC = () => {
     setIsEditing(false);
   };
 
-  const incomeProgress = goals.monthlyIncomeGoal > 0 ? Math.min(100, (currentMonthlyIncome / goals.monthlyIncomeGoal) * 100) : 0;
-  const equityProgress = goals.totalEquityGoal > 0 ? Math.min(100, (totalMarketValue / goals.totalEquityGoal) * 100) : 0;
+  const incomeProgress =
+    goals.monthlyIncomeGoal > 0
+      ? Math.min(100, (currentMonthlyIncome / goals.monthlyIncomeGoal) * 100)
+      : 0;
+  const equityProgress =
+    goals.totalEquityGoal > 0
+      ? Math.min(100, (totalMarketValue / goals.totalEquityGoal) * 100)
+      : 0;
 
   return (
     <div className="space-y-6 pb-12">
@@ -56,13 +72,13 @@ export const GoalsView: React.FC = () => {
             Metas Patrimoniais & Independência Financeira
           </h1>
           <p className="text-xs text-slate-400">
-            Acompanhe o caminho rumo à liberdade financeira cobrindo seu custo de vida mensal com proventos de FIIs.
+            Defina quanto você quer receber por mês de aluguéis, qual patrimônio deseja atingir e acompanhe quantos % do seu custo de vida já estão cobertos.
           </p>
         </div>
 
         <button
           onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
-          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all ${
+          className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all self-start sm:self-auto ${
             isEditing
               ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg'
               : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
@@ -73,21 +89,51 @@ export const GoalsView: React.FC = () => {
         </button>
       </div>
 
+      {/* Guia Explicativo da Aba */}
+      <TabGuideBanner
+        title="Como cadastrar e acompanhar suas Metas?"
+        subtitle="Clique em 'Editar Metas' no topo direito para personalizar seus objetivos"
+        items={[
+          {
+            term: 'Meta de Renda Mensal',
+            meaning:
+              'É o valor em Reais que você quer receber todos os meses em dividendos dos seus FIIs. A barra verde mostra quanto da meta você já alcançou.',
+            example: 'Se sua meta é R$ 5.000/mês e hoje você recebe R$ 500/mês, você já concluiu 10%.',
+          },
+          {
+            term: 'Meta de Patrimônio em FIIs',
+            meaning:
+              'É o valor total acumulado em cotas que você deseja construir no longo prazo.',
+          },
+          {
+            term: 'Meta FIRE (Viver de Renda)',
+            meaning:
+              'Compara seus proventos atuais com seu Custo de Vida Mensal. Quando atingir 100%, seus FIIs pagam todas as suas contas mensais!',
+          },
+        ]}
+      />
+
       {/* Grid Principal: Metas Principais e FIRE */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Meta 1: Renda Mensal */}
         <div className="p-6 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-4 shadow-lg flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Renda Mensal de Proventos
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                <span>Renda Mensal de Proventos</span>
+                <InfoTooltip
+                  title="Meta de Renda Mensal"
+                  description="Compara a soma dos seus dividendos do mês (recebidos + previstos) com a meta mensal que você definiu."
+                />
               </span>
               <Target className="w-4 h-4 text-emerald-400" />
             </div>
 
             {isEditing ? (
               <div className="space-y-1">
-                <label className="text-[11px] text-slate-400">Meta Desejada (R$/mês)</label>
+                <label className="text-[11px] text-slate-300 font-semibold block">
+                  Meta Desejada de Aluguéis (R$/mês)
+                </label>
                 <input
                   type="number"
                   value={incomeGoal}
@@ -97,7 +143,7 @@ export const GoalsView: React.FC = () => {
               </div>
             ) : (
               <div>
-                <div className="text-2xl font-extrabold text-white font-mono">
+                <div className="text-2xl font-extrabold text-white font-mono tabular-nums">
                   {formatBRL(currentMonthlyIncome, preferences.hideValues)}
                 </div>
                 <span className="text-xs text-slate-400 font-mono">
@@ -121,7 +167,14 @@ export const GoalsView: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-slate-800 text-xs text-slate-400">
-            Faltam {formatBRL(Math.max(0, goals.monthlyIncomeGoal - currentMonthlyIncome), preferences.hideValues)} por mês para a meta.
+            Faltam{' '}
+            <strong className="text-white font-mono">
+              {formatBRL(
+                Math.max(0, goals.monthlyIncomeGoal - currentMonthlyIncome),
+                preferences.hideValues
+              )}
+            </strong>{' '}
+            por mês para atingir a meta.
           </div>
         </div>
 
@@ -129,15 +182,21 @@ export const GoalsView: React.FC = () => {
         <div className="p-6 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-4 shadow-lg flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-400">
-                Patrimônio em FIIs
+              <span className="text-xs font-bold uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+                <span>Patrimônio em FIIs</span>
+                <InfoTooltip
+                  title="Meta Patrimonial"
+                  description="Compara o Valor de Mercado atual da sua carteira de FIIs com o patrimônio alvo que você planejou construir."
+                />
               </span>
               <TrendingUp className="w-4 h-4 text-blue-400" />
             </div>
 
             {isEditing ? (
               <div className="space-y-1">
-                <label className="text-[11px] text-slate-400">Meta Patrimonial Total (R$)</label>
+                <label className="text-[11px] text-slate-300 font-semibold block">
+                  Meta Patrimonial Total (R$)
+                </label>
                 <input
                   type="number"
                   value={equityGoal}
@@ -147,7 +206,7 @@ export const GoalsView: React.FC = () => {
               </div>
             ) : (
               <div>
-                <div className="text-2xl font-extrabold text-white font-mono">
+                <div className="text-2xl font-extrabold text-white font-mono tabular-nums">
                   {formatBRL(totalMarketValue, preferences.hideValues)}
                 </div>
                 <span className="text-xs text-slate-400 font-mono">
@@ -171,7 +230,14 @@ export const GoalsView: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-slate-800 text-xs text-slate-400">
-            Faltam {formatBRL(Math.max(0, goals.totalEquityGoal - totalMarketValue), preferences.hideValues)} para atingir o patrimônio alvo.
+            Faltam{' '}
+            <strong className="text-white font-mono">
+              {formatBRL(
+                Math.max(0, goals.totalEquityGoal - totalMarketValue),
+                preferences.hideValues
+              )}
+            </strong>{' '}
+            para atingir o patrimônio alvo.
           </div>
         </div>
 
@@ -181,7 +247,12 @@ export const GoalsView: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
                 <Flame className="w-4 h-4" />
-                Meta FIRE (Viver de Renda)
+                <span>Meta FIRE (Viver de Renda)</span>
+                <InfoTooltip
+                  title="Independência Financeira (FIRE)"
+                  description="Calcula o patrimônio necessário para que seus dividendos paguem 100% do seu custo de vida mensal informado."
+                  align="right"
+                />
               </span>
               <ShieldCheck className="w-4 h-4 text-amber-400" />
             </div>
@@ -189,7 +260,9 @@ export const GoalsView: React.FC = () => {
             {isEditing ? (
               <div className="space-y-2">
                 <div>
-                  <label className="text-[11px] text-slate-400">Custo de Vida Mensal (R$)</label>
+                  <label className="text-[11px] text-slate-300 font-semibold block">
+                    Seu Custo de Vida Mensal (R$/mês)
+                  </label>
                   <input
                     type="number"
                     value={livingExpenses}
@@ -198,7 +271,9 @@ export const GoalsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">DY Sustentável Estimado (% a.a.)</label>
+                  <label className="text-[11px] text-slate-300 font-semibold block">
+                    DY Sustentável Estimado (% a.a.)
+                  </label>
                   <input
                     type="number"
                     step="0.5"
@@ -210,19 +285,21 @@ export const GoalsView: React.FC = () => {
               </div>
             ) : (
               <div>
-                <div className="text-2xl font-extrabold text-amber-300 font-mono">
+                <div className="text-2xl font-extrabold text-amber-300 font-mono tabular-nums">
                   {formatBRL(fireData.requiredEquity, preferences.hideValues)}
                 </div>
                 <span className="text-xs text-slate-300 font-mono">
-                  Patrimônio para cobrir {formatBRL(goals.currentLivingExpenses, preferences.hideValues)}/mês
+                  Patrimônio p/ cobrir {formatBRL(goals.currentLivingExpenses, preferences.hideValues)}/mês
                 </span>
               </div>
             )}
 
             <div className="space-y-1 pt-1">
               <div className="flex justify-between text-xs text-slate-400 font-mono">
-                <span>Cobertura Custo de Vida</span>
-                <span className="text-amber-400 font-bold">{fireData.incomeProgressPercent.toFixed(1)}%</span>
+                <span>Cobertura do Custo de Vida</span>
+                <span className="text-amber-400 font-bold">
+                  {fireData.incomeProgressPercent.toFixed(1)}%
+                </span>
               </div>
               <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
                 <div
@@ -234,7 +311,11 @@ export const GoalsView: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-slate-800 text-xs text-slate-300">
-            Seus proventos atuais cobrem {fireData.incomeProgressPercent.toFixed(1)}% do seu custo de vida.
+            Seus proventos atuais já pagam{' '}
+            <strong className="text-amber-300 font-mono">
+              {fireData.incomeProgressPercent.toFixed(1)}%
+            </strong>{' '}
+            do seu custo de vida mensal.
           </div>
         </div>
       </div>

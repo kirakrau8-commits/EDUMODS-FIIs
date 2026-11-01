@@ -14,9 +14,11 @@ import {
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatDateBR } from '../../utils/formatters';
-import { DividendEvent, DividendStatus } from '../../types/fii';
+import { DividendEvent } from '../../types/fii';
 import { calculateSardinhaProjection } from '../../utils/financialMath';
 import { EditDividendModal } from '../modals/EditDividendModal';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
+import { VERIFIED_FII_DATABASE } from '../../data/fiiDatabase';
 
 export const DividendsView: React.FC = () => {
   const {
@@ -45,6 +47,32 @@ export const DividendsView: React.FC = () => {
   const [manualPaymentDate, setManualPaymentDate] = useState<string>('2026-10-25');
   const [manualRate, setManualRate] = useState<string>('1.10');
   const [manualQty, setManualQty] = useState<string>('50');
+  const [divSearch, setDivSearch] = useState<string>('');
+  const [divStatusFilter, setDivStatusFilter] = useState<'TODOS' | 'RECEBIDO' | 'PREVISTO'>('TODOS');
+
+  const filteredDividendsTable = useMemo(() => {
+    const q = divSearch.trim().toUpperCase();
+    return dividends.filter((d) => {
+      const matchTicker = !q || d.ticker.toUpperCase().includes(q);
+      const matchStatus = divStatusFilter === 'TODOS' || d.status === divStatusFilter;
+      return matchTicker && matchStatus;
+    });
+  }, [dividends, divSearch, divStatusFilter]);
+
+  const handleSelectManualTicker = (tickerVal: string) => {
+    const clean = tickerVal.toUpperCase();
+    setManualTicker(clean);
+    const holding = holdings.find((h) => h.ticker.toUpperCase() === clean);
+    const db = VERIFIED_FII_DATABASE[clean];
+    if (holding) {
+      setManualQty(String(holding.quantity));
+      if (holding.monthlyYieldPerShare > 0) {
+        setManualRate(holding.monthlyYieldPerShare.toFixed(2));
+      }
+    } else if (db && db.lastDividend > 0) {
+      setManualRate(db.lastDividend.toFixed(2));
+    }
+  };
 
   const monthNames = [
     'Janeiro',
@@ -149,7 +177,6 @@ export const DividendsView: React.FC = () => {
 
   // Histórico Mensal para o Gráfico de Barras
   const monthlyHistory = useMemo(() => {
-    // 6 meses passados até mês atual
     const months = [
       { label: 'Mai/26', received: 210, forecasted: 0 },
       { label: 'Jun/26', received: 228, forecasted: 0 },
@@ -163,14 +190,13 @@ export const DividendsView: React.FC = () => {
 
   // Simulação de Reinvestimento
   const currentTotalEquity = holdings.reduce((acc, h) => acc + h.marketValue, 0);
-  const avgYieldPerMonth = holdings.reduce((acc, h) => acc + h.quantity * h.monthlyYieldPerShare, 0);
   const contributionNum = parseFloat(newMonthlyContribution) || 0;
 
   const reinvestmentSimulation = useMemo(() => {
     return calculateSardinhaProjection(
       currentTotalEquity,
       contributionNum,
-      10.5, // 10.5% DY médio estimado
+      10.5,
       reinvestMonths
     );
   }, [currentTotalEquity, contributionNum, reinvestMonths]);
@@ -200,14 +226,14 @@ export const DividendsView: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-              Rendimentos & Proventos
+              Rendimentos & Proventos Isentos de IR
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-            Calendário de Pagamentos & Histórico
+            Calendário de Pagamentos & Histórico de Aluguéis
           </h1>
           <p className="text-xs text-slate-400">
-            Acompanhe datas de corte (Data-Com), dias de crédito e simule o efeito bola de neve com reinvestimento.
+            Acompanhe as datas em que você garante o direito ao aluguel (Data-Com), os dias em que o dinheiro cai na conta e o efeito bola de neve.
           </p>
         </div>
 
@@ -219,6 +245,29 @@ export const DividendsView: React.FC = () => {
           <span>Lançar Provento Manual</span>
         </button>
       </div>
+
+      {/* Guia Explicativo da Aba */}
+      <TabGuideBanner
+        title="Entenda os termos dos Rendimentos (Proventos)"
+        subtitle="O que significa Data-Com, Data de Pagamento, Valor por Cota e Cotas Elegíveis"
+        items={[
+          {
+            term: 'Data-Com (Data Base / Corte)',
+            meaning:
+              'É o último dia para você ter as cotas na carteira e garantir o direito de receber o aluguel daquele mês. Comprando depois da Data-Com, você só recebe no mês seguinte.',
+          },
+          {
+            term: 'Data de Pagamento',
+            meaning:
+              'É o dia exato em que o dinheiro cai livre de Imposto de Renda direto no saldo da sua corretora.',
+          },
+          {
+            term: 'Valor por Cota × Cotas Elegíveis',
+            meaning:
+              'O fundo anuncia quanto vai pagar por 1 cota (ex: R$ 1,10). Multiplicando pelas cotas que você tinha na Data-Com (ex: 50 cotas), você recebe R$ 55,00.',
+          },
+        ]}
+      />
 
       {/* Grid Principal: Área Esquerda (Calendário) e Área Direita (Gráficos & Simulação) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -552,11 +601,39 @@ export const DividendsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Tabela de Detalhamento por Ativo */}
+          {/* Tabela de Detalhamento por Ativo com Busca e Filtro */}
           <div className="p-5 rounded-2xl bg-[#0F172A] border border-slate-800 space-y-3">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              Detalhamento de Proventos por Fundo
-            </h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                Detalhamento de Proventos por Fundo ({filteredDividendsTable.length})
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  value={divSearch}
+                  onChange={(e) => setDivSearch(e.target.value)}
+                  placeholder="Filtrar sigla..."
+                  aria-label="Filtrar proventos por sigla"
+                  className="px-2.5 py-1 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono uppercase w-28"
+                />
+                <div className="flex items-center gap-1 p-0.5 bg-slate-900 rounded-lg border border-slate-800">
+                  {(['TODOS', 'RECEBIDO', 'PREVISTO'] as const).map((st) => (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setDivStatusFilter(st)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
+                        divStatusFilter === st
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
                 <thead className="text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-800 font-sans">
@@ -572,38 +649,59 @@ export const DividendsView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {dividends.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-800/40">
-                      <td className="py-2.5 px-3 font-bold text-white">{d.ticker}</td>
-                      <td className="py-2.5 px-3 text-right text-slate-300">{d.quantityEligible}</td>
-                      <td className="py-2.5 px-3 text-right text-slate-300">{formatBRL(d.ratePerShare)}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-emerald-400">
-                        {formatBRL(d.totalAmount, preferences.hideValues)}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-400">{formatDateBR(d.dataCom)}</td>
-                      <td className="py-2.5 px-3 text-slate-300">{formatDateBR(d.paymentDate)}</td>
-                      <td className="py-2.5 px-3 text-center">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            d.status === 'RECEBIDO'
-                              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                              : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
-                          }`}
-                        >
-                          {d.status}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          onClick={() => setSelectedDivToEdit(d)}
-                          className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-md transition-colors"
-                          title={`Editar provento de ${d.ticker}`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
+                  {filteredDividendsTable.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-slate-500 font-sans italic">
+                        Nenhum provento encontrado para este filtro.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredDividendsTable.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-800/40">
+                        <td className="py-2.5 px-3 font-bold text-white">{d.ticker}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-300">{d.quantityEligible}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-300">{formatBRL(d.ratePerShare)}</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-emerald-400">
+                          {formatBRL(d.totalAmount, preferences.hideValues)}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-400">{formatDateBR(d.dataCom)}</td>
+                        <td className="py-2.5 px-3 text-slate-300">{formatDateBR(d.paymentDate)}</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              d.status === 'RECEBIDO'
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                            }`}
+                          >
+                            {d.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {d.status === 'PREVISTO' && (
+                              <button
+                                type="button"
+                                onClick={() => updateDividendStatus(d.id, 'RECEBIDO')}
+                                className="px-2 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[10px] font-sans font-bold transition-colors cursor-pointer"
+                                title="Confirmar recebimento deste provento"
+                              >
+                                Confirmar
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDivToEdit(d)}
+                              className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-slate-800 rounded-md transition-colors cursor-pointer"
+                              title={`Editar provento de ${d.ticker}`}
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -615,22 +713,39 @@ export const DividendsView: React.FC = () => {
       {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
           <div className="w-full max-w-md bg-[#0F172A] border border-slate-700 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <h2 className="text-base font-bold text-white">Lançar Provento Manual</h2>
+            <div>
+              <h2 className="text-base font-bold text-white">Lançar Provento Manual</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Registre um dividendo anunciado pelo fundo. Ao digitar a sigla, a quantidade de cotas da sua carteira é sugerida automaticamente.
+              </p>
+            </div>
             <form onSubmit={handleCreateManual} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-300 font-medium block mb-1">Ticker do Fundo</label>
+                <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
+                  <span>1. Sigla do Fundo (Ticker)</span>
+                  <InfoTooltip
+                    title="Sigla do FII"
+                    description="Código de 4 letras + 11 do fundo que anunciou o dividendo (ex: HGLG11, MXRF11)."
+                  />
+                </label>
                 <input
                   type="text"
                   value={manualTicker}
-                  onChange={(e) => setManualTicker(e.target.value.toUpperCase())}
+                  onChange={(e) => handleSelectManualTicker(e.target.value)}
                   required
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono uppercase"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-medium block mb-1">Data-Com</label>
+                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
+                    <span>2. Data-Com</span>
+                    <InfoTooltip
+                      title="O que é Data-Com?"
+                      description="Data limite em que você precisava estar com as cotas na carteira para ter direito a este aluguel."
+                    />
+                  </label>
                   <input
                     type="date"
                     value={manualDataCom}
@@ -640,7 +755,14 @@ export const DividendsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-medium block mb-1">Data de Pagamento</label>
+                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
+                    <span>3. Data Pgto</span>
+                    <InfoTooltip
+                      title="Data de Pagamento"
+                      description="Dia em que o valor será depositado na sua conta da corretora."
+                      align="right"
+                    />
+                  </label>
                   <input
                     type="date"
                     value={manualPaymentDate}
@@ -653,7 +775,13 @@ export const DividendsView: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 font-medium block mb-1">Valor por Cota (R$)</label>
+                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
+                    <span>4. Valor por Cota (R$)</span>
+                    <InfoTooltip
+                      title="Valor por Cota"
+                      description="Valor anunciado pelo fundo para cada 1 cota (ex: R$ 1,10 por cota)."
+                    />
+                  </label>
                   <input
                     type="number"
                     step="0.001"
@@ -665,7 +793,14 @@ export const DividendsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 font-medium block mb-1">Cotas Elegíveis</label>
+                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
+                    <span>5. Cotas Elegíveis</span>
+                    <InfoTooltip
+                      title="Cotas Elegíveis"
+                      description="Quantidade de cotas daquele fundo que você possuía no fechamento da Data-Com."
+                      align="right"
+                    />
+                  </label>
                   <input
                     type="number"
                     min="1"
@@ -675,6 +810,13 @@ export const DividendsView: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
                   />
                 </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                <span className="text-slate-300">Total a Receber neste Pagamento:</span>
+                <strong className="text-emerald-400 font-mono text-sm">
+                  {formatBRL((parseFloat(manualRate) || 0) * (parseFloat(manualQty) || 0))}
+                </strong>
               </div>
 
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">

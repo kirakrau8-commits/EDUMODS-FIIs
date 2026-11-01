@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Edit3, Trash2, Check } from 'lucide-react';
+import { X, Edit3, Trash2 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { Transaction, OperationType } from '../../types/fii';
 
@@ -22,6 +22,8 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [fees, setFees] = useState('');
   const [type, setType] = useState<OperationType>('COMPRA');
   const [notes, setNotes] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (transaction) {
@@ -31,12 +33,13 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       setFees(String(transaction.fees));
       setType(transaction.type);
       setNotes(transaction.notes || '');
+      setConfirmDelete(false);
     }
   }, [transaction]);
 
   if (!isOpen || !transaction) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = parseFloat(quantity);
     const p = parseFloat(price);
@@ -44,22 +47,30 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
     if (isNaN(q) || q <= 0 || isNaN(p) || p <= 0) return;
 
-    updateTransaction(transaction.id, {
-      date,
-      quantity: q,
-      price: p,
-      fees: f,
-      type,
-      notes: notes.trim(),
-    });
-
-    onClose();
+    setIsSaving(true);
+    try {
+      await updateTransaction(transaction.id, {
+        date,
+        quantity: q,
+        price: p,
+        fees: f,
+        type,
+        notes: notes.trim(),
+      });
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Excluir esta transação?')) {
-      deleteTransaction(transaction.id);
+  const handleConfirmDelete = async () => {
+    setIsSaving(true);
+    try {
+      await deleteTransaction(transaction.id);
+      setConfirmDelete(false);
       onClose();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -152,27 +163,60 @@ export const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             />
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="text-rose-400 hover:text-rose-300 flex items-center gap-1"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Excluir</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={onClose} className="px-3 py-1.5 text-slate-400">
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md"
-              >
-                Salvar
-              </button>
+          {confirmDelete ? (
+            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 space-y-2">
+              <p className="text-rose-200 font-semibold">
+                Confirmar exclusão desta operação de <span className="font-mono">{transaction.ticker}</span>?
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleConfirmDelete}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                >
+                  {isSaving ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => setConfirmDelete(true)}
+                className="text-rose-400 hover:text-rose-300 flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-slate-400"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md"
+                >
+                  {isSaving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

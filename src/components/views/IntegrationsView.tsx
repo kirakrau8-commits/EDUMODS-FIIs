@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Sliders,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
@@ -10,7 +9,6 @@ import {
   Server,
   Zap,
   Clock,
-  Info,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { brapiAdapter, provider2Adapter, provider3Adapter } from '../../services/marketData/adapters';
@@ -36,8 +34,31 @@ export const IntegrationsView: React.FC = () => {
   const [p3ApiKey, setP3ApiKey] = useState(preferences.provider3ApiKey || '');
   const [p3TestResult, setP3TestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  const handleSaveBrapi = () => {
-    updatePreferences({ brapiToken });
+  // Sincroniza o formulário quando as preferências do usuário carregam do Supabase
+  useEffect(() => {
+    setBrapiToken(preferences.brapiToken || '');
+    setP2Name(preferences.provider2Name || 'Provedor Secundário');
+    setP2Enabled(preferences.provider2Enabled || false);
+    setP2Endpoint(preferences.provider2Endpoint || '');
+    setP2ApiKey(preferences.provider2ApiKey || '');
+    setP3Name(preferences.provider3Name || 'Provedor Terciário');
+    setP3Enabled(preferences.provider3Enabled || false);
+    setP3Endpoint(preferences.provider3Endpoint || '');
+    setP3ApiKey(preferences.provider3ApiKey || '');
+  }, [
+    preferences.brapiToken,
+    preferences.provider2Name,
+    preferences.provider2Enabled,
+    preferences.provider2Endpoint,
+    preferences.provider2ApiKey,
+    preferences.provider3Name,
+    preferences.provider3Enabled,
+    preferences.provider3Endpoint,
+    preferences.provider3ApiKey,
+  ]);
+
+  const handleSaveBrapi = async () => {
+    await updatePreferences({ brapiToken });
   };
 
   const handleTestBrapi = async () => {
@@ -47,7 +68,7 @@ export const IntegrationsView: React.FC = () => {
       const res = await brapiAdapter.testConnection({ token: brapiToken });
       setBrapiTestResult(res);
       if (res.success) {
-        updatePreferences({ brapiToken });
+        await updatePreferences({ brapiToken });
       }
     } finally {
       setTestingBrapi(false);
@@ -59,7 +80,7 @@ export const IntegrationsView: React.FC = () => {
     const res = await provider2Adapter.testConnection({ endpoint: p2Endpoint, apiKey: p2ApiKey });
     setP2TestResult(res);
     if (res.success) {
-      updatePreferences({
+      await updatePreferences({
         provider2Name: p2Name,
         provider2Enabled: p2Enabled,
         provider2Endpoint: p2Endpoint,
@@ -73,7 +94,7 @@ export const IntegrationsView: React.FC = () => {
     const res = await provider3Adapter.testConnection({ endpoint: p3Endpoint, apiKey: p3ApiKey });
     setP3TestResult(res);
     if (res.success) {
-      updatePreferences({
+      await updatePreferences({
         provider3Name: p3Name,
         provider3Enabled: p3Enabled,
         provider3Endpoint: p3Endpoint,
@@ -144,7 +165,7 @@ export const IntegrationsView: React.FC = () => {
                 </button>
               </div>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                O token fica gravado de forma segura no perfil local do usuário.
+                O token fica gravado de forma segura no perfil da sua conta no Supabase.
               </span>
             </div>
 

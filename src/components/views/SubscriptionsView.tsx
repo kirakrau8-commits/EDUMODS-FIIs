@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Layers, Calendar, PlusCircle, CheckCircle, Clock } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatDateBR } from '../../utils/formatters';
+import { TabGuideBanner } from '../common/InfoTooltip';
 
 interface SubscriptionOffer {
   id: string;
@@ -71,6 +72,25 @@ export const SubscriptionsView: React.FC = () => {
           Acompanhe ofertas públicas de novas cotas, fatores de proporção e exerça seus direitos com preço fixado abaixo da cotação de mercado.
         </p>
       </div>
+
+      <TabGuideBanner
+        title="O que é uma Subscrição de FIIs?"
+        subtitle="Quando um fundo quer crescer e comprar novos imóveis, ele emite novas cotas e dá preferência aos cotistas atuais."
+        items={[
+          {
+            term: 'Preço de Emissão com Desconto',
+            definition: 'Normalmente as novas cotas são oferecidas por um valor abaixo da cotação atual da Bolsa (B3), permitindo reduzir seu Preço Médio.',
+          },
+          {
+            term: 'Fator de Proporção',
+            definition: 'Define quantas cotas novas você tem direito de comprar. Exemplo: fator de 12% (0,12) em 100 cotas dá direito a subscrever 12 novas cotas.',
+          },
+          {
+            term: 'Registro Automático na Carteira',
+            definition: 'Ao clicar em "Exercer Direito de Subscrição", o sistema lança a operação automaticamente na sua aba Operações e recalcula seu Preço Médio.',
+          },
+        ]}
+      />
 
       {exercisedFeedback && (
         <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">

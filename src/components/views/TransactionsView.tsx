@@ -1,21 +1,19 @@
 import React, { useState } from 'react';
 import {
-  History,
   PlusCircle,
   Download,
   Trash2,
-  Filter,
   Search,
   ArrowDownRight,
   ArrowUpRight,
-  Layers,
-  Coins,
   Edit2,
+  X,
 } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatDateBR } from '../../utils/formatters';
-import { OperationType, Transaction } from '../../types/fii';
+import { Transaction } from '../../types/fii';
 import { EditTransactionModal } from '../modals/EditTransactionModal';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 interface TransactionsViewProps {
   onOpenTransactionModal: () => void;
@@ -29,6 +27,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [search, setSearch] = useState('');
   const [selectedType, setSelectedType] = useState<string>('TODOS');
   const [selectedTxToEdit, setSelectedTxToEdit] = useState<Transaction | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filteredTransactions = transactions.filter((t) => {
     const matchesSearch =
@@ -52,9 +52,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     document.body.removeChild(link);
   };
 
-  const handleDelete = (id: string, ticker: string) => {
-    if (window.confirm(`Deseja excluir a operação de ${ticker}?`)) {
-      deleteTransaction(id);
+  const handleConfirmDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await deleteTransaction(id);
+      setConfirmDeleteId(null);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -67,13 +71,13 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
               Livro de Operações
             </span>
-            <span className="text-xs text-slate-400">{transactions.length} registros</span>
+            <span className="text-xs text-slate-400">{transactions.length} registros salvos</span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-white">
-            Histórico de Operações & Notas de Corretagem
+            Histórico de Compras, Vendas & Subscrições
           </h1>
           <p className="text-xs text-slate-400">
-            Registro cronológico auditável de compras, vendas, subscrições e amortizações com apuração de lucro/prejuízo realizado.
+            Registre suas ordens executadas na corretora. O sistema recalcula automaticamente seu Preço Médio e sua posição na carteira.
           </p>
         </div>
 
@@ -83,7 +87,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
           >
             <Download className="w-4 h-4 text-emerald-400" />
-            <span>Exportar CSV</span>
+            <span>Exportar Planilha CSV</span>
           </button>
           <button
             onClick={onOpenTransactionModal}
@@ -95,13 +99,36 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
+      {/* Guia Explicativo da Aba */}
+      <TabGuideBanner
+        title="Como funcionam os tipos de operação?"
+        subtitle="Entenda a diferença entre Compra, Venda, Subscrição e Amortização"
+        items={[
+          {
+            term: 'COMPRA e SUBSCRIÇÃO',
+            meaning:
+              'Aumentam sua quantidade de cotas e atualizam seu Preço Médio Ponderado. A Subscrição ocorre quando o fundo emite cotas novas (geralmente mais baratas) para quem já é cotista.',
+          },
+          {
+            term: 'VENDA (Lucro ou Prejuízo Realizado)',
+            meaning:
+              'Reduz sua quantidade de cotas mantendo o Preço Médio inalterado, e calcula se você teve lucro ou prejuízo sobre as cotas vendidas (em FIIs, vendas com lucro pagam 20% de IR via DARF).',
+          },
+          {
+            term: 'AMORTIZAÇÃO',
+            meaning:
+              'Devolução parcial do patrimônio do fundo aos cotistas, reduzindo o custo de aquisição das cotas.',
+          },
+        ]}
+      />
+
       {/* Barra de Filtros */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[#0F172A] border border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-[#0F172A] border border-slate-800">
         <div className="relative flex-1 max-w-sm">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Buscar por ticker ou anotação..."
+            placeholder="Buscar por sigla (ex: HGLG11) ou anotação..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-emerald-500"
@@ -138,7 +165,16 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <th className="py-2.5 px-3 text-right">Preço Unitário</th>
                 <th className="py-2.5 px-3 text-right">Taxas</th>
                 <th className="py-2.5 px-3 text-right">Total Financeiro</th>
-                <th className="py-2.5 px-3 text-right">Resultado Realizado</th>
+                <th className="py-2.5 px-3 text-right">
+                  <span className="inline-flex items-center gap-1">
+                    Resultado Realizado
+                    <InfoTooltip
+                      title="Resultado Realizado"
+                      description="Aparece apenas nas operações de VENDA. Mostra o lucro ou prejuízo líquido obtido ao vender as cotas em relação ao seu Preço Médio."
+                      align="right"
+                    />
+                  </span>
+                </th>
                 <th className="py-2.5 px-3 font-sans">Observações</th>
                 <th className="py-2.5 px-3 text-center">Ações</th>
               </tr>
@@ -152,7 +188,6 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 </tr>
               ) : (
                 filteredTransactions.map((tx) => {
-                  const isSell = tx.type === 'VENDA';
                   const isProfit = (tx.realizedResult || 0) >= 0;
 
                   return (
@@ -174,13 +209,17 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3 px-3 font-bold text-white">{tx.ticker}</td>
-                      <td className="py-3 px-3 text-right text-slate-200">{tx.quantity}</td>
-                      <td className="py-3 px-3 text-right text-slate-300">{formatBRL(tx.price, preferences.hideValues)}</td>
-                      <td className="py-3 px-3 text-right text-slate-400">{formatBRL(tx.fees, preferences.hideValues)}</td>
-                      <td className="py-3 px-3 text-right font-bold text-white">
+                      <td className="py-3 px-3 text-right text-slate-200 tabular-nums">{tx.quantity}</td>
+                      <td className="py-3 px-3 text-right text-slate-300 tabular-nums">
+                        {formatBRL(tx.price, preferences.hideValues)}
+                      </td>
+                      <td className="py-3 px-3 text-right text-slate-400 tabular-nums">
+                        {formatBRL(tx.fees, preferences.hideValues)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold text-white tabular-nums">
                         {formatBRL(tx.total, preferences.hideValues)}
                       </td>
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-3 px-3 text-right tabular-nums">
                         {tx.realizedResult !== undefined ? (
                           <span className={isProfit ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
                             {formatBRL(tx.realizedResult, preferences.hideValues, true)}
@@ -202,14 +241,38 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDelete(tx.id, tx.ticker)}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-                            title="Excluir operação"
-                            aria-label={`Excluir operação de ${tx.ticker}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+
+                          {confirmDeleteId === tx.id ? (
+                            <div className="inline-flex items-center gap-1 bg-rose-950/80 border border-rose-500/40 px-2 py-0.5 rounded-lg font-sans">
+                              <button
+                                type="button"
+                                disabled={deletingId === tx.id}
+                                onClick={() => handleConfirmDelete(tx.id)}
+                                className="text-[10px] font-bold text-rose-200 hover:text-white"
+                              >
+                                {deletingId === tx.id ? '...' : 'Confirmar'}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingId === tx.id}
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-slate-400 hover:text-white"
+                                aria-label="Cancelar exclusão"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDeleteId(tx.id)}
+                              className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
+                              title="Excluir operação"
+                              aria-label={`Excluir operação de ${tx.ticker}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

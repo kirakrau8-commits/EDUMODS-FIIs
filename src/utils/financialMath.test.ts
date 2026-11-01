@@ -10,6 +10,8 @@ import {
   calculateSardinhaProjection,
   calculateRebalanceByContribution,
   calculateFIREProgress,
+  calculateYieldOnCost,
+  computePortfolioEvolutionTimeline,
 } from './financialMath.ts';
 
 test('calculateWeightedAveragePrice updates average price and quantity with fees', () => {
@@ -118,3 +120,26 @@ test('calculateFIREProgress calculates equity required and coverage percentage',
   assert.equal(res.incomeProgressPercent, 50);
   assert.equal(res.monthlyShortfall, 2500);
 });
+
+test('calculateYieldOnCost computes monthly and annual YoC based on average price', () => {
+  const res = calculateYieldOnCost(100, 1.0);
+  assert.equal(res.monthlyYoC, 1.0);
+  assert.equal(res.annualYoC, 12.0);
+});
+
+test('computePortfolioEvolutionTimeline builds proportional building periods for 6M, 1A, and MAX', () => {
+  const periods6M = computePortfolioEvolutionTimeline({
+    totalInvested: 30000,
+    totalMarketValue: 32500,
+    monthlyDividendsTotal: 280,
+    periodFilter: '6M',
+  });
+  assert.equal(periods6M.length, 6);
+  const lastBuilding = periods6M[periods6M.length - 1];
+  assert.equal(lastBuilding.isCurrent, true);
+  assert.equal(lastBuilding.marketValue, 32500);
+  assert.equal(lastBuilding.invested, 30000);
+  assert.equal(lastBuilding.gainValue, 2500);
+  assert.ok(lastBuilding.floorsCount >= 3);
+});
+

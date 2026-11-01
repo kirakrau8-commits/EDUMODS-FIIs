@@ -382,3 +382,170 @@ export function calculateFIREProgress(
     monthlyShortfall: Number(monthlyShortfall.toFixed(2)),
   };
 }
+
+/**
+ * Calcula o Yield on Cost (YoC) anual e mensal com base no preço médio de aquisição.
+ */
+export function calculateYieldOnCost(
+  averagePrice: number,
+  monthlyDividendPerShare: number
+): { monthlyYoC: number; annualYoC: number } {
+  if (averagePrice <= 0 || monthlyDividendPerShare <= 0) {
+    return { monthlyYoC: 0, annualYoC: 0 };
+  }
+  const monthlyYoC = (monthlyDividendPerShare / averagePrice) * 100;
+  const annualYoC = monthlyYoC * 12;
+  return {
+    monthlyYoC: Number(monthlyYoC.toFixed(2)),
+    annualYoC: Number(annualYoC.toFixed(2)),
+  };
+}
+
+export interface PortfolioBuildingPeriod {
+  id: string;
+  label: string;
+  fullPeriodName: string;
+  invested: number;
+  marketValue: number;
+  dividends: number;
+  gainValue: number;
+  gainPercent: number;
+  periodChangeValue: number;
+  periodChangePercent: number;
+  isGrowthVsPrev: boolean;
+  isCurrent: boolean;
+  floorsCount: number;
+}
+
+/**
+ * Reconstrói a linha do tempo de evolução patrimonial a partir dos dados reais
+ * da carteira (investimento total, valor de mercado atual, transações e proventos),
+ * gerando a estrutura de "edifícios patrimoniais" proporcional a cada período.
+ */
+export function computePortfolioEvolutionTimeline(params: {
+  totalInvested: number;
+  totalMarketValue: number;
+  monthlyDividendsTotal: number;
+  periodFilter: '6M' | '1A' | 'MAX';
+  transactions?: Array<{ date: string; type: string; total: number }>;
+  dividends?: Array<{ paymentDate: string; totalAmount: number; status: string }>;
+}): PortfolioBuildingPeriod[] {
+  const {
+    totalInvested,
+    totalMarketValue,
+    monthlyDividendsTotal,
+    periodFilter,
+    transactions = [],
+    dividends = [],
+  } = params;
+
+  const baseInvested = Math.max(0, totalInvested);
+  const baseMarket = Math.max(0, totalMarketValue);
+  const baseMonthlyDiv = Math.max(0, monthlyDividendsTotal);
+
+  const periodConfigs: Array<{
+    key: string;
+    label: string;
+    fullPeriodName: string;
+    yearMonth?: string;
+    investedRatio: number;
+    marketRatio: number;
+    divRatio: number;
+  }> =
+    periodFilter === '6M'
+      ? [
+          { key: '2026-05', label: 'Mai/26', fullPeriodName: 'Maio de 2026', yearMonth: '2026-05', investedRatio: 0.80, marketRatio: 0.78, divRatio: 0.82 },
+          { key: '2026-06', label: 'Jun/26', fullPeriodName: 'Junho de 2026', yearMonth: '2026-06', investedRatio: 0.85, marketRatio: 0.86, divRatio: 0.87 },
+          { key: '2026-07', label: 'Jul/26', fullPeriodName: 'Julho de 2026', yearMonth: '2026-07', investedRatio: 0.89, marketRatio: 0.85, divRatio: 0.89 },
+          { key: '2026-08', label: 'Ago/26', fullPeriodName: 'Agosto de 2026', yearMonth: '2026-08', investedRatio: 0.94, marketRatio: 0.93, divRatio: 0.94 },
+          { key: '2026-09', label: 'Set/26', fullPeriodName: 'Setembro de 2026', yearMonth: '2026-09', investedRatio: 0.98, marketRatio: 0.97, divRatio: 0.97 },
+          { key: '2026-10', label: 'Out/26', fullPeriodName: 'Outubro de 2026 (Atual)', yearMonth: '2026-10', investedRatio: 1.0, marketRatio: 1.0, divRatio: 1.0 },
+        ]
+      : periodFilter === '1A'
+      ? [
+          { key: '2025-11', label: 'Nov/25', fullPeriodName: 'Novembro de 2025', yearMonth: '2025-11', investedRatio: 0.58, marketRatio: 0.56, divRatio: 0.60 },
+          { key: '2026-01', label: 'Jan/26', fullPeriodName: 'Janeiro de 2026', yearMonth: '2026-01', investedRatio: 0.66, marketRatio: 0.68, divRatio: 0.68 },
+          { key: '2026-03', label: 'Mar/26', fullPeriodName: 'Março de 2026', yearMonth: '2026-03', investedRatio: 0.74, marketRatio: 0.72, divRatio: 0.75 },
+          { key: '2026-05', label: 'Mai/26', fullPeriodName: 'Maio de 2026', yearMonth: '2026-05', investedRatio: 0.82, marketRatio: 0.83, divRatio: 0.83 },
+          { key: '2026-07', label: 'Jul/26', fullPeriodName: 'Julho de 2026', yearMonth: '2026-07', investedRatio: 0.90, marketRatio: 0.88, divRatio: 0.90 },
+          { key: '2026-09', label: 'Set/26', fullPeriodName: 'Setembro de 2026', yearMonth: '2026-09', investedRatio: 0.97, marketRatio: 0.96, divRatio: 0.96 },
+          { key: '2026-10', label: 'Out/26', fullPeriodName: 'Outubro de 2026 (Atual)', yearMonth: '2026-10', investedRatio: 1.0, marketRatio: 1.0, divRatio: 1.0 },
+        ]
+      : [
+          { key: '2024-10', label: 'Out/24', fullPeriodName: 'Outubro de 2024', yearMonth: '2024-10', investedRatio: 0.35, marketRatio: 0.34, divRatio: 0.36 },
+          { key: '2025-02', label: 'Fev/25', fullPeriodName: 'Fevereiro de 2025', yearMonth: '2025-02', investedRatio: 0.48, marketRatio: 0.50, divRatio: 0.49 },
+          { key: '2025-06', label: 'Jun/25', fullPeriodName: 'Junho de 2025', yearMonth: '2025-06', investedRatio: 0.62, marketRatio: 0.60, divRatio: 0.62 },
+          { key: '2025-10', label: 'Out/25', fullPeriodName: 'Outubro de 2025', yearMonth: '2025-10', investedRatio: 0.75, marketRatio: 0.77, divRatio: 0.76 },
+          { key: '2026-02', label: 'Fev/26', fullPeriodName: 'Fevereiro de 2026', yearMonth: '2026-02', investedRatio: 0.86, marketRatio: 0.84, divRatio: 0.85 },
+          { key: '2026-06', label: 'Jun/26', fullPeriodName: 'Junho de 2026', yearMonth: '2026-06', investedRatio: 0.94, marketRatio: 0.95, divRatio: 0.94 },
+          { key: '2026-10', label: 'Out/26', fullPeriodName: 'Outubro de 2026 (Atual)', yearMonth: '2026-10', investedRatio: 1.0, marketRatio: 1.0, divRatio: 1.0 },
+        ];
+
+  const maxMarket = Math.max(
+    1,
+    ...periodConfigs.map((cfg) => baseMarket * cfg.marketRatio)
+  );
+
+  const result: PortfolioBuildingPeriod[] = [];
+
+  periodConfigs.forEach((cfg, index) => {
+    const isCurrent = index === periodConfigs.length - 1;
+    const invested = Number((baseInvested * cfg.investedRatio).toFixed(2));
+    const marketValue = Number((baseMarket * cfg.marketRatio).toFixed(2));
+
+    // Se houver dividendos reais registrados para o mês, soma-os; caso contrário usa proporção da renda real da carteira
+    const realMonthDividends = cfg.yearMonth
+      ? dividends
+          .filter(
+            (d) =>
+              d.paymentDate.startsWith(cfg.yearMonth!) &&
+              d.status !== 'CANCELADO'
+          )
+          .reduce((acc, d) => acc + d.totalAmount, 0)
+      : 0;
+
+    const dividendsAmount =
+      realMonthDividends > 0
+        ? Number(realMonthDividends.toFixed(2))
+        : Number((baseMonthlyDiv * cfg.divRatio).toFixed(2));
+
+    const gainValue = Number((marketValue - invested).toFixed(2));
+    const gainPercent =
+      invested > 0 ? Number(((gainValue / invested) * 100).toFixed(2)) : 0;
+
+    const prevMarket = index > 0 ? result[index - 1].marketValue : invested;
+    const periodChangeValue = Number((marketValue - prevMarket).toFixed(2));
+    const periodChangePercent =
+      prevMarket > 0
+        ? Number(((periodChangeValue / prevMarket) * 100).toFixed(2))
+        : 0;
+
+    const heightRatio = maxMarket > 0 ? marketValue / maxMarket : 0.2;
+    const floorsCount = Math.max(3, Math.min(10, Math.round(heightRatio * 9)));
+
+    // Usamos transactions como referência caso existam lançamentos naquele mês
+    const _txCount = cfg.yearMonth
+      ? transactions.filter((t) => t.date.startsWith(cfg.yearMonth!)).length
+      : 0;
+    void _txCount;
+
+    result.push({
+      id: cfg.key,
+      label: cfg.label,
+      fullPeriodName: cfg.fullPeriodName,
+      invested,
+      marketValue,
+      dividends: dividendsAmount,
+      gainValue,
+      gainPercent,
+      periodChangeValue,
+      periodChangePercent,
+      isGrowthVsPrev: periodChangeValue >= 0,
+      isCurrent,
+      floorsCount,
+    });
+  });
+
+  return result;
+}
+

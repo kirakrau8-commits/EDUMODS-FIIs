@@ -25,9 +25,7 @@ import { TransactionModal } from './components/modals/TransactionModal';
 import { AccountModal } from './components/modals/AccountModal';
 import { NotificationsModal } from './components/modals/NotificationsModal';
 import { OperationType } from './types/fii';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import { LoginView } from './components/auth/LoginView';
-import { Building2 } from 'lucide-react';
+import { AuthProvider } from './context/AuthContext';
 
 const MODULE_TITLES: Record<AppModuleId, string> = {
   inicio: 'Dashboard Estratégico',
@@ -49,7 +47,7 @@ const MODULE_TITLES: Record<AppModuleId, string> = {
   glossario: 'Glossário de Fundos Imobiliários',
   backup: 'Backup, Exportação & Notas',
   integracoes: 'Configurações de APIs & BRAPI',
-  planos: 'Planos & Assinatura Comercial',
+  planos: 'Acesso Pessoal Completo',
 };
 
 function MainApp() {
@@ -181,41 +179,12 @@ function MainApp() {
   );
 }
 
-function AuthenticatedApp() {
-  const { session, user, isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen w-full bg-[#090D16] flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-xl shadow-emerald-500/20 text-white font-bold mb-4 animate-pulse">
-          <Building2 className="w-6 h-6" />
-        </div>
-        <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold mb-1">
-          <div className="w-4 h-4 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin" />
-          <span>Verificando sessão segura...</span>
-        </div>
-        <span className="text-xs text-slate-500 font-mono">EDUMODS FIIs &bull; Supabase Auth</span>
-      </div>
-    );
-  }
-
-  // Sem sessão válida: exibe estritamente a tela de login
-  if (!session || !user) {
-    return <LoginView />;
-  }
-
-  // Sessão autenticada e válida: exibe a aplicação completa
-  return (
-    <PortfolioProvider>
-      <MainApp />
-    </PortfolioProvider>
-  );
-}
-
 export default function App() {
   return (
     <AuthProvider>
-      <AuthenticatedApp />
+      <PortfolioProvider>
+        <MainApp />
+      </PortfolioProvider>
     </AuthProvider>
   );
 }

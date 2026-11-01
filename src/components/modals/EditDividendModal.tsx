@@ -21,6 +21,8 @@ export const EditDividendModal: React.FC<EditDividendModalProps> = ({
   const [ratePerShare, setRatePerShare] = useState('');
   const [quantityEligible, setQuantityEligible] = useState('');
   const [status, setStatus] = useState<DividendStatus>('RECEBIDO');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (dividend) {
@@ -29,32 +31,41 @@ export const EditDividendModal: React.FC<EditDividendModalProps> = ({
       setRatePerShare(String(dividend.ratePerShare));
       setQuantityEligible(String(dividend.quantityEligible));
       setStatus(dividend.status);
+      setConfirmDelete(false);
     }
   }, [dividend]);
 
   if (!isOpen || !dividend) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const rate = parseFloat(ratePerShare);
     const qty = parseFloat(quantityEligible);
     if (isNaN(rate) || isNaN(qty) || rate <= 0 || qty <= 0) return;
 
-    updateDividend(dividend.id, {
-      dataCom,
-      paymentDate,
-      ratePerShare: rate,
-      quantityEligible: qty,
-      status,
-    });
-
-    onClose();
+    setIsSaving(true);
+    try {
+      await updateDividend(dividend.id, {
+        dataCom,
+        paymentDate,
+        ratePerShare: rate,
+        quantityEligible: qty,
+        status,
+      });
+      onClose();
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Excluir este lançamento de provento?')) {
-      deleteDividend(dividend.id);
+  const handleConfirmDelete = async () => {
+    setIsSaving(true);
+    try {
+      await deleteDividend(dividend.id);
+      setConfirmDelete(false);
       onClose();
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -136,27 +147,60 @@ export const EditDividendModal: React.FC<EditDividendModalProps> = ({
             </select>
           </div>
 
-          <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={handleDelete}
-              className="text-rose-400 hover:text-rose-300 flex items-center gap-1"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Excluir</span>
-            </button>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={onClose} className="px-3 py-1.5 text-slate-400">
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md"
-              >
-                Salvar Alterações
-              </button>
+          {confirmDelete ? (
+            <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-500/40 space-y-2">
+              <p className="text-rose-200 font-semibold">
+                Confirmar exclusão deste provento de <span className="font-mono">{dividend.ticker}</span>?
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleConfirmDelete}
+                  className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold"
+                >
+                  {isSaving ? 'Excluindo...' : 'Confirmar Exclusão'}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => setConfirmDelete(true)}
+                className="text-rose-400 hover:text-rose-300 flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Excluir</span>
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={onClose}
+                  className="px-3 py-1.5 text-slate-400"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md"
+                >
+                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                </button>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

@@ -81,13 +81,22 @@ export interface RebalanceItem {
   suggestedShares: number;
 }
 
+export interface CustomPriceAlert {
+  id: string;
+  ticker: string;
+  type: 'PRECO_TETO' | 'PVP_MAXIMO' | 'PROVENTO_MINIMO';
+  thresholdValue: number;
+  isActive: boolean;
+}
+
 export interface UserPreferences {
   hideValues: boolean;
   currency: string;
   autoRefreshQuotes: boolean;
   maxConcentrationAlertPercent: number; // e.g. 20%
   minYieldAlertPercent: number; // e.g. 8%
-  activePlan: 'Gratuito' | 'Pro' | 'VIP';
+  /** @deprecated O plano real do usuário é gerenciado de forma protegida em fii_user_profiles.plan */
+  activePlan?: 'Gratuito' | 'Pro' | 'VIP';
   brapiToken?: string;
   provider2Name?: string;
   provider2Enabled?: boolean;
@@ -97,6 +106,7 @@ export interface UserPreferences {
   provider3Enabled?: boolean;
   provider3Endpoint?: string;
   provider3ApiKey?: string;
+  customAlerts?: CustomPriceAlert[];
 }
 
 export interface PortfolioGoals {

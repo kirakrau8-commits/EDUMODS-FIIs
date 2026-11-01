@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Scale, Plus, X } from 'lucide-react';
 import { VERIFIED_FII_DATABASE, FIIDataItem } from '../../data/fiiDatabase';
 import { formatBRL, formatPercent } from '../../utils/formatters';
+import { TabGuideBanner } from '../common/InfoTooltip';
 
 export const ComparatorView: React.FC = () => {
   const [selectedTickers, setSelectedTickers] = useState<string[]>(['HGLG11', 'XPLG11', 'BTLG11']);
@@ -64,6 +65,25 @@ export const ComparatorView: React.FC = () => {
           </div>
         )}
       </div>
+
+      <TabGuideBanner
+        title="Como comparar FIIs de forma justa"
+        subtitle="Coloque até 4 fundos lado a lado para decidir qual oferece a melhor relação entre preço, renda e liquidez."
+        items={[
+          {
+            term: 'Compare Fundos do Mesmo Setor',
+            definition: 'Comparar galpões logísticos entre si (ex: HGLG11 vs BTLG11) é mais eficaz do que comparar um FII de Tijolo com um de Papel, pois a dinâmica de dividendos é diferente.',
+          },
+          {
+            term: 'P/VP + Dividend Yield',
+            definition: 'Avalie os dois juntos: um P/VP próximo ou abaixo de 1,00 somado a um Dividend Yield consistente costuma indicar boa margem de segurança.',
+          },
+          {
+            term: 'Volume Diário Médio (Liquidez)',
+            definition: 'Indica quantos milhões de reais daquele fundo são negociados por dia na B3. Quanto maior o volume, mais fácil é comprar ou vender suas cotas rapidamente.',
+          },
+        ]}
+      />
 
       {/* Grade de Comparação */}
       <div className="overflow-x-auto">

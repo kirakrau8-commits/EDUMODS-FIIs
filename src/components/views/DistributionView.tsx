@@ -14,6 +14,7 @@ import {
 import { usePortfolio } from '../../context/PortfolioContext';
 import { formatBRL, formatPercent } from '../../utils/formatters';
 import { calculateRebalanceByContribution } from '../../utils/financialMath';
+import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 
 export const DistributionView: React.FC = () => {
   const {
@@ -174,6 +175,25 @@ export const DistributionView: React.FC = () => {
         </div>
       </div>
 
+      <TabGuideBanner
+        title="Como equilibrar sua carteira e planejar o próximo aporte"
+        subtitle="Veja onde seu dinheiro está concentrado e descubra qual fundo comprar no mês para manter a carteira balanceada."
+        items={[
+          {
+            term: 'Tijolo vs. Papel vs. Híbrido',
+            definition: 'FIIs de Tijolo são donos de imóveis físicos (galpões, shoppings). FIIs de Papel investem em dívidas imobiliárias (CRIs atrelados ao IPCA ou CDI). Equilibrar ambos protege tanto contra a inflação quanto na queda de juros.',
+          },
+          {
+            term: 'Peso Atual vs. Peso Alvo',
+            definition: 'O Peso Atual mostra quanto cada fundo representa hoje na sua carteira. O Peso Alvo é a porcentagem ideal que você deseja ter naquele fundo (você pode ajustar clicando no campo de Peso Alvo na tabela abaixo).',
+          },
+          {
+            term: 'Simulador de Rebalanceamento',
+            definition: 'Ao digitar quanto pretende investir no mês (ex: R$ 2.000), o sistema indica exatamente quantas cotas comprar dos fundos que ficaram para trás, sem precisar vender nada.',
+          },
+        ]}
+      />
+
       {/* Grid: 4 Blocos de Distribuição (Categoria, Segmento, Gestão, Indexador) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Bloco 1: Categoria */}
@@ -331,6 +351,7 @@ export const DistributionView: React.FC = () => {
                 value={simulationContribution}
                 onChange={(e) => setSimulationContribution(e.target.value)}
                 className="w-24 bg-transparent text-white font-mono text-xs focus:outline-hidden"
+                aria-label="Valor do aporte para simulação"
               />
             </div>
           </div>
@@ -352,7 +373,15 @@ export const DistributionView: React.FC = () => {
               <tr>
                 <th className="py-2.5 px-3">Fundo</th>
                 <th className="py-2.5 px-3 text-right">Peso Atual</th>
-                <th className="py-2.5 px-3 text-right">Peso Alvo</th>
+                <th className="py-2.5 px-3 text-right">
+                  <span className="inline-flex items-center gap-1 justify-end">
+                    Peso Alvo (%)
+                    <InfoTooltip
+                      title="Peso Alvo (%)"
+                      description="Qual porcentagem ideal este fundo deveria ter na sua carteira total. Você pode alterar o número diretamente na caixa."
+                    />
+                  </span>
+                </th>
                 <th className="py-2.5 px-3 text-right">Valor Atual</th>
                 <th className="py-2.5 px-3 text-right">Valor Alvo</th>
                 <th className="py-2.5 px-3 text-right">Diferença</th>
@@ -363,11 +392,29 @@ export const DistributionView: React.FC = () => {
             <tbody className="divide-y divide-slate-800/60">
               {rebalanceData.suggestions.map((item) => {
                 const isUnderweight = item.differenceValue > 0;
+                const rawHolding = holdings.find((h) => h.ticker === item.ticker);
                 return (
                   <tr key={item.ticker} className="hover:bg-slate-800/40">
                     <td className="py-3 px-3 font-bold text-white">{item.ticker}</td>
                     <td className="py-3 px-3 text-right text-slate-300">{item.currentWeightPercent.toFixed(1)}%</td>
-                    <td className="py-3 px-3 text-right text-slate-100 font-bold">{item.targetWeightPercent.toFixed(1)}%</td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="inline-flex items-center justify-end gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={rawHolding?.targetWeight ?? 10}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(100, parseFloat(e.target.value) || 0));
+                            updateHoldingTargetWeight(item.ticker, val);
+                          }}
+                          className="w-14 px-2 py-1 text-right bg-slate-900 border border-slate-700 rounded-lg text-white font-mono text-xs focus:outline-hidden focus:border-emerald-500"
+                          aria-label={`Peso alvo para ${item.ticker}`}
+                        />
+                        <span className="text-slate-500">%</span>
+                      </div>
+                    </td>
                     <td className="py-3 px-3 text-right text-slate-300">{formatBRL(item.currentMarketValue, preferences.hideValues)}</td>
                     <td className="py-3 px-3 text-right text-slate-300">{formatBRL(item.targetMarketValue, preferences.hideValues)}</td>
                     <td className="py-3 px-3 text-right">

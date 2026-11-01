@@ -18,7 +18,6 @@ import {
   BookOpen,
   Database,
   Sliders,
-  CreditCard,
   Layers,
   X,
 } from 'lucide-react';
@@ -101,7 +100,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'glossario', label: 'Glossário', icon: BookOpen },
         { id: 'backup', label: 'Backup & Notas', icon: Database },
         { id: 'integracoes', label: 'APIs & BRAPI', icon: Sliders },
-        { id: 'planos', label: 'Planos & Assinatura', icon: CreditCard },
       ],
     },
   ];
@@ -185,11 +183,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </div>
 
-        {/* Rodapé da sidebar com versão e status do produto */}
+        {/* Rodapé da sidebar com versão e status de uso pessoal */}
         <div className="p-3 border-t border-slate-800/80 bg-[#070A12]">
           <div className="flex items-center justify-between px-2 text-[11px] text-slate-500">
             <span>EDUMODS FIIs</span>
-            <span className="font-mono text-[10px] text-emerald-400 font-semibold">v1.0 Pro</span>
+            <span className="font-mono text-[10px] text-emerald-400 font-semibold">Uso Pessoal</span>
           </div>
         </div>
       </aside>

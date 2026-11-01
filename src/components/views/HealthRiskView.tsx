@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldAlert, CheckCircle, AlertTriangle, Info, PieChart, ShieldCheck } from 'lucide-react';
 import { usePortfolio } from '../../context/PortfolioContext';
+import { TabGuideBanner } from '../common/InfoTooltip';
 
 export const HealthRiskView: React.FC = () => {
   const { holdings, preferences } = usePortfolio();
@@ -32,6 +33,25 @@ export const HealthRiskView: React.FC = () => {
           Avaliação baseada em métricas transparentes e regras de alocação de risco. Sem pontuações arbitrárias: todos os critérios e limites são fundamentados e explicados.
         </p>
       </div>
+
+      <TabGuideBanner
+        title="Entenda os indicadores de proteção da sua carteira"
+        subtitle="Uma carteira saudável evita depender demais de um único fundo ou de um único setor da economia."
+        items={[
+          {
+            term: 'Concentração no Maior Ativo',
+            definition: 'Indica quanto o seu maior FII pesa no patrimônio total. O ideal é que nenhum fundo isolado passe de 15% a 20% da carteira.',
+          },
+          {
+            term: 'Concentração Top 3 Fundos',
+            definition: 'Mostra a soma dos seus 3 maiores fundos. Abaixo de 60% garante que um imprevisto em um fundo não comprometa sua renda mensal.',
+          },
+          {
+            term: 'Diversificação Setorial',
+            definition: 'Ter pelo menos 3 a 5 setores diferentes (Logística, Recebíveis, Shoppings, Lajes, Híbridos) reduz oscilações em diferentes ciclos econômicos.',
+          },
+        ]}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Critério 1: Concentração no Maior Ativo */}
