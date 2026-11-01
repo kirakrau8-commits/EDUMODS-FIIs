@@ -29,11 +29,13 @@ import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 interface DashboardViewProps {
   onNavigate: (module: AppModuleId) => void;
   onOpenTransactionModal: () => void;
+  onOpenAddDividendModal: (ticker?: string, suggestedQty?: number) => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onOpenTransactionModal,
+  onOpenAddDividendModal,
 }) => {
   const {
     holdings,
@@ -84,7 +86,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner de Boas-Vindas & Ações Rápidas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#131E35] to-[#0F172A] border border-slate-800 shadow-xl">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-[#0F172A] via-[#131E35] to-[#0F172A] border border-slate-800 shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
@@ -99,21 +101,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             Painel Estratégico de FIIs
           </h1>
           <p className="text-xs text-slate-400 max-w-xl">
-            Acompanhe o rendimento da sua carteira, cotações em tempo real e o avanço rumo à renda passiva sustentável.
+            Adicione seus fundos imobiliários, registre dividendos por cota com cálculo automático e acompanhe sua renda mensal.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={onOpenTransactionModal}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/20 transition-all hover:scale-[1.01] cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Nova Operação</span>
+            <span>Adicionar Fundo (FII)</span>
+          </button>
+          <button
+            onClick={() => onOpenAddDividendModal()}
+            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white font-extrabold text-xs border border-blue-500/40 transition-all cursor-pointer"
+          >
+            <Coins className="w-4 h-4 text-emerald-400" />
+            <span>Registrar Provento</span>
           </button>
           <button
             onClick={() => onNavigate('calculadoras')}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-xs border border-slate-700 transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white font-medium text-xs border border-slate-700 transition-colors cursor-pointer"
           >
             <Calculator className="w-4 h-4 text-emerald-400" />
             <span>Calculadoras</span>

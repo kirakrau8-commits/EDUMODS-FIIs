@@ -20,12 +20,17 @@ import { EditDividendModal } from '../modals/EditDividendModal';
 import { InfoTooltip, TabGuideBanner } from '../common/InfoTooltip';
 import { VERIFIED_FII_DATABASE } from '../../data/fiiDatabase';
 
-export const DividendsView: React.FC = () => {
+interface DividendsViewProps {
+  onOpenAddDividendModal?: (ticker?: string, suggestedQty?: number) => void;
+}
+
+export const DividendsView: React.FC<DividendsViewProps> = ({
+  onOpenAddDividendModal,
+}) => {
   const {
     dividends,
     holdings,
     preferences,
-    addManualDividend,
     updateDividendStatus,
   } = usePortfolio();
 
@@ -40,13 +45,6 @@ export const DividendsView: React.FC = () => {
   const [reinvestMonths, setReinvestMonths] = useState<number>(12);
   const [newMonthlyContribution, setNewMonthlyContribution] = useState<string>('500');
 
-  // Modal para lançamento manual
-  const [showManualModal, setShowManualModal] = useState<boolean>(false);
-  const [manualTicker, setManualTicker] = useState<string>('HGLG11');
-  const [manualDataCom, setManualDataCom] = useState<string>('2026-10-15');
-  const [manualPaymentDate, setManualPaymentDate] = useState<string>('2026-10-25');
-  const [manualRate, setManualRate] = useState<string>('1.10');
-  const [manualQty, setManualQty] = useState<string>('50');
   const [divSearch, setDivSearch] = useState<string>('');
   const [divStatusFilter, setDivStatusFilter] = useState<'TODOS' | 'RECEBIDO' | 'PREVISTO'>('TODOS');
 
@@ -58,21 +56,6 @@ export const DividendsView: React.FC = () => {
       return matchTicker && matchStatus;
     });
   }, [dividends, divSearch, divStatusFilter]);
-
-  const handleSelectManualTicker = (tickerVal: string) => {
-    const clean = tickerVal.toUpperCase();
-    setManualTicker(clean);
-    const holding = holdings.find((h) => h.ticker.toUpperCase() === clean);
-    const db = VERIFIED_FII_DATABASE[clean];
-    if (holding) {
-      setManualQty(String(holding.quantity));
-      if (holding.monthlyYieldPerShare > 0) {
-        setManualRate(holding.monthlyYieldPerShare.toFixed(2));
-      }
-    } else if (db && db.lastDividend > 0) {
-      setManualRate(db.lastDividend.toFixed(2));
-    }
-  };
 
   const monthNames = [
     'Janeiro',
@@ -201,24 +184,6 @@ export const DividendsView: React.FC = () => {
     );
   }, [currentTotalEquity, contributionNum, reinvestMonths]);
 
-  const handleCreateManual = (e: React.FormEvent) => {
-    e.preventDefault();
-    const rate = parseFloat(manualRate) || 0;
-    const qty = parseFloat(manualQty) || 0;
-    if (rate <= 0 || qty <= 0) return;
-
-    addManualDividend({
-      ticker: manualTicker.toUpperCase().trim(),
-      dataCom: manualDataCom,
-      paymentDate: manualPaymentDate,
-      quantityEligible: qty,
-      ratePerShare: rate,
-      status: 'PREVISTO',
-    });
-
-    setShowManualModal(false);
-  };
-
   return (
     <div className="space-y-6 pb-12">
       {/* Top Banner */}
@@ -233,16 +198,16 @@ export const DividendsView: React.FC = () => {
             Calendário de Pagamentos & Histórico de Aluguéis
           </h1>
           <p className="text-xs text-slate-400">
-            Acompanhe as datas em que você garante o direito ao aluguel (Data-Com), os dias em que o dinheiro cai na conta e o efeito bola de neve.
+            Informe o provento por cota (ex.: 80 × R$ 0,084 = R$ 6,72) e acompanhe seus recebimentos mensais.
           </p>
         </div>
 
         <button
-          onClick={() => setShowManualModal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all self-start sm:self-auto"
+          onClick={() => onOpenAddDividendModal && onOpenAddDividendModal()}
+          className="flex items-center gap-2 px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-600/20 transition-all self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" />
-          <span>Lançar Provento Manual</span>
+          <span>Registrar Provento / Dividendo</span>
         </button>
       </div>
 
@@ -708,136 +673,6 @@ export const DividendsView: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Modal de Lançamento Manual de Provento */}
-      {showManualModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs">
-          <div className="w-full max-w-md bg-[#0F172A] border border-slate-700 rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div>
-              <h2 className="text-base font-bold text-white">Lançar Provento Manual</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Registre um dividendo anunciado pelo fundo. Ao digitar a sigla, a quantidade de cotas da sua carteira é sugerida automaticamente.
-              </p>
-            </div>
-            <form onSubmit={handleCreateManual} className="space-y-3 text-xs">
-              <div>
-                <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
-                  <span>1. Sigla do Fundo (Ticker)</span>
-                  <InfoTooltip
-                    title="Sigla do FII"
-                    description="Código de 4 letras + 11 do fundo que anunciou o dividendo (ex: HGLG11, MXRF11)."
-                  />
-                </label>
-                <input
-                  type="text"
-                  value={manualTicker}
-                  onChange={(e) => handleSelectManualTicker(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono uppercase"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
-                    <span>2. Data-Com</span>
-                    <InfoTooltip
-                      title="O que é Data-Com?"
-                      description="Data limite em que você precisava estar com as cotas na carteira para ter direito a este aluguel."
-                    />
-                  </label>
-                  <input
-                    type="date"
-                    value={manualDataCom}
-                    onChange={(e) => setManualDataCom(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
-                    <span>3. Data Pgto</span>
-                    <InfoTooltip
-                      title="Data de Pagamento"
-                      description="Dia em que o valor será depositado na sua conta da corretora."
-                      align="right"
-                    />
-                  </label>
-                  <input
-                    type="date"
-                    value={manualPaymentDate}
-                    onChange={(e) => setManualPaymentDate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
-                    <span>4. Valor por Cota (R$)</span>
-                    <InfoTooltip
-                      title="Valor por Cota"
-                      description="Valor anunciado pelo fundo para cada 1 cota (ex: R$ 1,10 por cota)."
-                    />
-                  </label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0.001"
-                    value={manualRate}
-                    onChange={(e) => setManualRate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-slate-300 font-medium flex items-center justify-between mb-1">
-                    <span>5. Cotas Elegíveis</span>
-                    <InfoTooltip
-                      title="Cotas Elegíveis"
-                      description="Quantidade de cotas daquele fundo que você possuía no fechamento da Data-Com."
-                      align="right"
-                    />
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={manualQty}
-                    onChange={(e) => setManualQty(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
-                <span className="text-slate-300">Total a Receber neste Pagamento:</span>
-                <strong className="text-emerald-400 font-mono text-sm">
-                  {formatBRL((parseFloat(manualRate) || 0) * (parseFloat(manualQty) || 0))}
-                </strong>
-              </div>
-
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowManualModal(false)}
-                  className="px-3 py-1.5 text-slate-400 hover:text-white"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg"
-                >
-                  Confirmar Lançamento
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {selectedDivToEdit && (
         <EditDividendModal

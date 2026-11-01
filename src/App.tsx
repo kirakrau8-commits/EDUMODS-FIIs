@@ -22,6 +22,7 @@ import { IntegrationsView } from './components/views/IntegrationsView';
 import { PlansView } from './components/views/PlansView';
 import { ChartsView } from './components/views/ChartsView';
 import { TransactionModal } from './components/modals/TransactionModal';
+import { AddDividendModal } from './components/modals/AddDividendModal';
 import { AccountModal } from './components/modals/AccountModal';
 import { NotificationsModal } from './components/modals/NotificationsModal';
 import { OperationType } from './types/fii';
@@ -54,10 +55,15 @@ function MainApp() {
   const [activeModule, setActiveModule] = useState<AppModuleId>('inicio');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Modais
+  // Modais de Cadastro de Fundo e Cadastro de Provento (fluxos separados estilo Renda FII)
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [txModalTicker, setTxModalTicker] = useState('');
   const [txModalType, setTxModalType] = useState<OperationType>('COMPRA');
+
+  const [isDividendModalOpen, setIsDividendModalOpen] = useState(false);
+  const [divModalTicker, setDivModalTicker] = useState('');
+  const [divModalQty, setDivModalQty] = useState<number | undefined>(undefined);
+
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
 
@@ -67,6 +73,12 @@ function MainApp() {
     setIsTxModalOpen(true);
   };
 
+  const handleOpenAddDividend = (ticker = '', suggestedQty?: number) => {
+    setDivModalTicker(ticker);
+    setDivModalQty(suggestedQty);
+    setIsDividendModalOpen(true);
+  };
+
   const renderActiveView = () => {
     switch (activeModule) {
       case 'inicio':
@@ -74,17 +86,23 @@ function MainApp() {
           <DashboardView
             onNavigate={(mod) => setActiveModule(mod)}
             onOpenTransactionModal={() => handleOpenTransaction('', 'COMPRA')}
+            onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
           />
         );
       case 'carteira':
         return (
           <PortfolioView
             onOpenTransactionModal={(t, type) => handleOpenTransaction(t, type)}
+            onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
             onNavigate={(mod) => setActiveModule(mod)}
           />
         );
       case 'rendimentos':
-        return <DividendsView />;
+        return (
+          <DividendsView
+            onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
+          />
+        );
       case 'metas':
       case 'fire':
         return <GoalsView />;
@@ -131,6 +149,7 @@ function MainApp() {
           <DashboardView
             onNavigate={(mod) => setActiveModule(mod)}
             onOpenTransactionModal={() => handleOpenTransaction('', 'COMPRA')}
+            onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
           />
         );
     }
@@ -164,6 +183,14 @@ function MainApp() {
         onClose={() => setIsTxModalOpen(false)}
         defaultTicker={txModalTicker}
         defaultType={txModalType}
+        onOpenAddDividend={(ticker, qty) => handleOpenAddDividend(ticker, qty)}
+      />
+
+      <AddDividendModal
+        isOpen={isDividendModalOpen}
+        onClose={() => setIsDividendModalOpen(false)}
+        defaultTicker={divModalTicker}
+        defaultQuantity={divModalQty}
       />
 
       <AccountModal

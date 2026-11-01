@@ -13,6 +13,28 @@ import {
   calculateYieldOnCost,
   computePortfolioEvolutionTimeline,
 } from './financialMath.ts';
+import { formatBRL, parseFlexibleNumber } from './formatters.ts';
+
+test('formatBRL preserves sub-cent precision for per-share dividend rates like R$ 0,084 and 2 decimals for totals like R$ 6,72', () => {
+  const rateFormatted = formatBRL(0.084).replace(/\u00a0/g, ' ');
+  const totalFormatted = formatBRL(Number((80 * 0.084).toFixed(2))).replace(/\u00a0/g, ' ');
+  assert.equal(rateFormatted, 'R$ 0,084');
+  assert.equal(totalFormatted, 'R$ 6,72');
+});
+
+test('parseFlexibleNumber accepts both comma and dot decimal inputs for ALZR11 example (80 x 0,084 = 6,72)', () => {
+  const qty = parseFlexibleNumber('80');
+  const rateComma = parseFlexibleNumber('0,084');
+  const rateDot = parseFlexibleNumber('0.084');
+  const priceComma = parseFlexibleNumber('10,86');
+
+  assert.equal(qty, 80);
+  assert.equal(rateComma, 0.084);
+  assert.equal(rateDot, 0.084);
+  assert.equal(priceComma, 10.86);
+  assert.equal(Number((qty * rateComma).toFixed(2)), 6.72);
+  assert.equal(Number((qty * priceComma).toFixed(2)), 868.8);
+});
 
 test('calculateWeightedAveragePrice updates average price and quantity with fees', () => {
   // Compra inicial: 100 cotas a R$ 100,00 = R$ 10.000,00
