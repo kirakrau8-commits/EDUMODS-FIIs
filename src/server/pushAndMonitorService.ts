@@ -713,7 +713,7 @@ export async function fetchLiveMarketQuotesServer(
     };
   }
 
-  const token = (customBrapiToken || process.env.BRAPI_TOKEN || '').trim();
+  const token = (customBrapiToken || process.env.BRAPI_TOKEN || 'uLudELZWq6ovf5SRhsK53B').trim();
   let liveResolvedCount = 0;
   let primarySourceLabel = '';
 

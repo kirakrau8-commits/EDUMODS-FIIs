@@ -133,6 +133,7 @@ const INITIAL_PREFERENCES: UserPreferences = {
   autoRefreshQuotes: true,
   maxConcentrationAlertPercent: 25,
   minYieldAlertPercent: 8.0,
+  brapiToken: 'uLudELZWq6ovf5SRhsK53B',
   customAlerts: [
     { id: 'alt_1', ticker: 'HGLG11', type: 'PRECO_TETO', thresholdValue: 155.0, isActive: true },
     { id: 'alt_2', ticker: 'MXRF11', type: 'PVP_MAXIMO', thresholdValue: 1.02, isActive: true },
@@ -366,13 +367,19 @@ function loadInitialLocalPortfolioState(): InitialLocalData {
           {}
         ),
       },
-      preferences: {
-        ...INITIAL_PREFERENCES,
-        ...safeParseJson<Partial<UserPreferences>>(
-          localStorage.getItem(`${PERSONAL_STORAGE_PREFIX}_preferences`),
-          {}
-        ),
-      },
+      preferences: (() => {
+        const loaded = {
+          ...INITIAL_PREFERENCES,
+          ...safeParseJson<Partial<UserPreferences>>(
+            localStorage.getItem(`${PERSONAL_STORAGE_PREFIX}_preferences`),
+            {}
+          ),
+        };
+        if (!loaded.brapiToken || !loaded.brapiToken.trim()) {
+          loaded.brapiToken = 'uLudELZWq6ovf5SRhsK53B';
+        }
+        return loaded;
+      })(),
       notes: safeParseJson<Record<string, string>>(
         localStorage.getItem(`${PERSONAL_STORAGE_PREFIX}_notes`),
         {}
@@ -735,14 +742,20 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   } = useMemo(() => {
     let invested = 0;
     let market = 0;
+    let costForKnown = 0;
+    let marketForKnown = 0;
 
     holdings.forEach((h) => {
-      invested += h.totalCost;
       market += h.marketValue;
+      if (h.totalCost != null && h.totalCost > 0) {
+        invested += h.totalCost;
+        costForKnown += h.totalCost;
+        marketForKnown += h.marketValue;
+      }
     });
 
-    const gain = market - invested;
-    const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
+    const gain = costForKnown > 0 ? marketForKnown - costForKnown : 0;
+    const gainPct = costForKnown > 0 ? (gain / costForKnown) * 100 : 0;
 
     const withWeights = holdings.map((h) => ({
       ...h,
@@ -846,7 +859,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         quantity: newQty,
         averagePrice: newAvg,
         currentPrice: newPrice,
-        totalCost: Number((newQty * newAvg).toFixed(2)),
+        totalCost: newAvg != null && newAvg > 0 ? Number((newQty * newAvg).toFixed(2)) : null,
         marketValue,
         unrealizedGain,
         unrealizedGainPercent,
@@ -957,16 +970,21 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!ticker) {
         return { success: false, error: 'O ticker do fundo é obrigatório.' };
       }
-      if (tx.quantity <= 0 || tx.price <= 0) {
-        return { success: false, error: 'Quantidade e preço devem ser maiores que zero.' };
+      if (tx.quantity <= 0) {
+        return { success: false, error: 'A quantidade de cotas deve ser maior que zero.' };
+      }
+      if (tx.type === 'VENDA' && (tx.price == null || tx.price <= 0)) {
+        return { success: false, error: 'O preço de venda deve ser maior que zero.' };
       }
 
       setSyncError(null);
 
-      const totalValue =
-        tx.type === 'VENDA'
-          ? tx.quantity * tx.price - (tx.fees || 0)
-          : tx.quantity * tx.price + (tx.fees || 0);
+      const isKnownPrice = tx.price != null && tx.price > 0;
+      const totalValue = isKnownPrice
+        ? tx.type === 'VENDA'
+          ? tx.quantity * tx.price! - (tx.fees || 0)
+          : tx.quantity * tx.price! + (tx.fees || 0)
+        : null;
 
       const existingHolding = holdings.find((h) => h.ticker === ticker);
       let realizedResult: number | undefined;
@@ -985,11 +1003,16 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           };
         }
 
+        const avgForSale =
+          existingHolding.averagePrice != null && existingHolding.averagePrice > 0
+            ? existingHolding.averagePrice
+            : (tx.price ?? 100);
+
         const saleRes = calculateSaleResult(
           existingHolding.quantity,
-          existingHolding.averagePrice,
+          avgForSale,
           tx.quantity,
-          tx.price,
+          tx.price ?? 100,
           tx.fees || 0
         );
 
@@ -1018,36 +1041,48 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
       } else {
         // COMPRA, SUBSCRICAO, AMORTIZACAO
+        const isUnknownPrice = tx.price == null || tx.price <= 0;
         const prevQty = existingHolding ? existingHolding.quantity : 0;
-        const prevAvg = existingHolding ? existingHolding.averagePrice : 0;
-
-        const buyRes = calculateWeightedAveragePrice(
-          prevQty,
-          prevAvg,
-          tx.quantity,
-          tx.price,
-          tx.fees || 0
-        );
+        const prevAvg = existingHolding ? (existingHolding.averagePrice ?? 0) : 0;
+        const newQty = prevQty + tx.quantity;
 
         const dbInfo = VERIFIED_FII_DATABASE[ticker];
         const currentPrice = existingHolding
           ? existingHolding.currentPrice
           : dbInfo
           ? dbInfo.currentPrice
-          : tx.price;
+          : (!isUnknownPrice && tx.price ? tx.price : 100);
+
+        let newAvgPrice: number | null = null;
+        let newTotalCost: number | null = null;
+
+        if (!isUnknownPrice && tx.price && tx.price > 0) {
+          const buyRes = calculateWeightedAveragePrice(
+            prevQty,
+            prevAvg,
+            tx.quantity,
+            tx.price,
+            tx.fees || 0
+          );
+          newAvgPrice = buyRes.newAveragePrice;
+          newTotalCost = buyRes.totalCost;
+        } else if (existingHolding && existingHolding.averagePrice != null && existingHolding.averagePrice > 0) {
+          newAvgPrice = existingHolding.averagePrice;
+          newTotalCost = Number((newQty * newAvgPrice).toFixed(2));
+        }
 
         const { marketValue, unrealizedGain, unrealizedGainPercent } = calculateUnrealizedGain(
-          buyRes.newQuantity,
-          buyRes.newAveragePrice,
+          newQty,
+          newAvgPrice,
           currentPrice
         );
 
         if (existingHolding) {
           const updated: FIIHolding = {
             ...existingHolding,
-            quantity: buyRes.newQuantity,
-            averagePrice: buyRes.newAveragePrice,
-            totalCost: buyRes.totalCost,
+            quantity: newQty,
+            averagePrice: newAvgPrice,
+            totalCost: newTotalCost,
             marketValue,
             unrealizedGain,
             unrealizedGainPercent,
@@ -1055,17 +1090,17 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           updatedHoldingToSave = updated;
           nextHoldings = holdings.map((h) => (h.ticker === ticker ? updated : h));
         } else {
-          const vpa = dbInfo ? dbInfo.vpa : tx.price;
+          const vpa = dbInfo ? dbInfo.vpa : (currentPrice || 100);
           const pvp = vpa > 0 ? currentPrice / vpa : 1;
           const newHolding: FIIHolding = {
             ticker,
             name: dbInfo ? dbInfo.name : `${ticker} FII`,
             category: dbInfo ? dbInfo.category : 'Tijolo',
             segment: dbInfo ? dbInfo.segment : 'Logística',
-            quantity: buyRes.newQuantity,
-            averagePrice: buyRes.newAveragePrice,
+            quantity: newQty,
+            averagePrice: newAvgPrice,
             currentPrice,
-            totalCost: buyRes.totalCost,
+            totalCost: newTotalCost,
             marketValue,
             unrealizedGain,
             unrealizedGainPercent,
@@ -1096,7 +1131,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         quantity: tx.quantity,
         price: tx.price,
         fees: tx.fees || 0,
-        total: Number(totalValue.toFixed(2)),
+        total: totalValue != null ? Number(totalValue.toFixed(2)) : null,
         realizedResult,
         notes: tx.notes,
       };
@@ -1164,38 +1199,48 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       let qty = existing ? existing.quantity : 0;
-      let totalCost = existing ? existing.totalCost : 0;
-      let avgPrice = existing ? existing.averagePrice : 0;
+      let totalCost = existing?.totalCost != null ? existing.totalCost : null;
+      let avgPrice = existing?.averagePrice != null ? existing.averagePrice : null;
 
       // 1. Reverte o efeito da transação antiga (se existir)
       if (oldTx) {
         if (oldTx.type === 'COMPRA' || oldTx.type === 'SUBSCRICAO') {
-          const oldTxCost = oldTx.quantity * oldTx.price + (oldTx.fees || 0);
+          const oldPrice = oldTx.price ?? 0;
+          const oldTxCost = oldTx.quantity * oldPrice + (oldTx.fees || 0);
           qty = Math.max(0, qty - oldTx.quantity);
-          totalCost = Math.max(0, totalCost - oldTxCost);
-          avgPrice = qty > 0 ? totalCost / qty : 0;
+          if (totalCost != null) {
+            totalCost = Math.max(0, totalCost - oldTxCost);
+            avgPrice = qty > 0 ? totalCost / qty : null;
+          }
         } else if (oldTx.type === 'VENDA') {
           qty = qty + oldTx.quantity;
-          totalCost = qty * avgPrice;
+          if (avgPrice != null) {
+            totalCost = qty * avgPrice;
+          }
         }
       }
 
       // 2. Aplica o efeito da nova transação (se existir)
       if (newTx) {
         if (newTx.type === 'COMPRA' || newTx.type === 'SUBSCRICAO') {
-          const buyRes = calculateWeightedAveragePrice(
-            qty,
-            avgPrice,
-            newTx.quantity,
-            newTx.price,
-            newTx.fees || 0
-          );
-          qty = buyRes.newQuantity;
-          avgPrice = buyRes.newAveragePrice;
-          totalCost = buyRes.totalCost;
+          const newPrice = newTx.price ?? 0;
+          if (newPrice > 0) {
+            const buyRes = calculateWeightedAveragePrice(
+              qty,
+              avgPrice ?? 0,
+              newTx.quantity,
+              newPrice,
+              newTx.fees || 0
+            );
+            qty = buyRes.newQuantity;
+            avgPrice = buyRes.newAveragePrice;
+            totalCost = buyRes.totalCost;
+          } else {
+            qty = qty + newTx.quantity;
+          }
         } else if (newTx.type === 'VENDA') {
           qty = Math.max(0, qty - newTx.quantity);
-          totalCost = Number((qty * avgPrice).toFixed(2));
+          totalCost = avgPrice != null ? Number((qty * avgPrice).toFixed(2)) : null;
         }
       }
 
@@ -1208,7 +1253,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const dbInfo = VERIFIED_FII_DATABASE[targetTicker];
-      const currentPrice = existing?.currentPrice ?? dbInfo?.currentPrice ?? newTx?.price ?? avgPrice;
+      const currentPrice = existing?.currentPrice ?? dbInfo?.currentPrice ?? newTx?.price ?? (avgPrice ?? 100);
       const { marketValue, unrealizedGain, unrealizedGainPercent } = calculateUnrealizedGain(
         qty,
         avgPrice,
@@ -1219,8 +1264,8 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         const updatedHolding: FIIHolding = {
           ...existing,
           quantity: qty,
-          averagePrice: Number(avgPrice.toFixed(2)),
-          totalCost: Number(totalCost.toFixed(2)),
+          averagePrice: avgPrice != null ? Number(avgPrice.toFixed(2)) : null,
+          totalCost: totalCost != null ? Number(totalCost.toFixed(2)) : null,
           marketValue,
           unrealizedGain,
           unrealizedGainPercent,
@@ -1246,21 +1291,27 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (!existingTx) return;
 
       const mergedTx = { ...existingTx, ...updated };
-      const total =
-        mergedTx.type === 'VENDA'
-          ? mergedTx.quantity * mergedTx.price - (mergedTx.fees || 0)
-          : mergedTx.quantity * mergedTx.price + (mergedTx.fees || 0);
+      const mergedPrice = mergedTx.price != null && mergedTx.price > 0 ? mergedTx.price : null;
+      const total = mergedPrice != null
+        ? mergedTx.type === 'VENDA'
+          ? mergedTx.quantity * mergedPrice - (mergedTx.fees || 0)
+          : mergedTx.quantity * mergedPrice + (mergedTx.fees || 0)
+        : null;
 
       let realizedResult = mergedTx.realizedResult;
       const holdingForTicker = holdings.find(
         (h) => h.ticker.toUpperCase() === mergedTx.ticker.toUpperCase()
       );
-      if (mergedTx.type === 'VENDA' && holdingForTicker) {
+      if (mergedTx.type === 'VENDA' && holdingForTicker && mergedPrice != null) {
+        const avgForSale =
+          holdingForTicker.averagePrice != null && holdingForTicker.averagePrice > 0
+            ? holdingForTicker.averagePrice
+            : mergedPrice;
         const sellCalc = calculateSaleResult(
           Math.max(holdingForTicker.quantity, mergedTx.quantity),
-          holdingForTicker.averagePrice,
+          avgForSale,
           mergedTx.quantity,
-          mergedTx.price,
+          mergedPrice,
           mergedTx.fees || 0
         );
         realizedResult = sellCalc.realizedResult;
@@ -1268,7 +1319,7 @@ export const PortfolioProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const finalTx: Transaction = {
         ...mergedTx,
-        total: Number(total.toFixed(2)),
+        total: total != null ? Number(total.toFixed(2)) : null,
         realizedResult,
       };
       const nextTransactions = transactions.map((t) => (t.id === id ? finalTx : t));

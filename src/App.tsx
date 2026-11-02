@@ -21,19 +21,22 @@ import { BackupView } from './components/views/BackupView';
 import { IntegrationsView } from './components/views/IntegrationsView';
 import { PlansView } from './components/views/PlansView';
 import { ChartsView } from './components/views/ChartsView';
+import { AssistantView } from './components/views/AssistantView';
 import { TransactionModal } from './components/modals/TransactionModal';
 import { AddDividendModal } from './components/modals/AddDividendModal';
 import { AccountModal } from './components/modals/AccountModal';
 import { NotificationsModal } from './components/modals/NotificationsModal';
 import { OperationType } from './types/fii';
 import { AuthProvider } from './context/AuthContext';
+import { Bot } from 'lucide-react';
 
 const MODULE_TITLES: Record<AppModuleId, string> = {
   inicio: 'Dashboard Estratégico',
   carteira: 'Minha Carteira',
   rendimentos: 'Calendário de Rendimentos & Proventos',
+  assistente: 'Assistente EDUMODS FIIs (Gemini)',
   metas: 'Metas Patrimoniais',
-  calculadoras: 'Calculadoras Financeiras',
+  calculadoras: 'Simulador de Juros Compostos & Bola de Neve',
   distribuicao: 'Distribuição & Alocação',
   graficos: 'Evolução Patrimonial & Gráficos',
   explorar: 'Explorar FIIs na B3',
@@ -100,6 +103,13 @@ function MainApp() {
       case 'rendimentos':
         return (
           <DividendsView
+            onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
+          />
+        );
+      case 'assistente':
+        return (
+          <AssistantView
+            onOpenTransactionModal={(t, type) => handleOpenTransaction(t, type)}
             onOpenAddDividendModal={(t, q) => handleOpenAddDividend(t, q)}
           />
         );
@@ -176,6 +186,19 @@ function MainApp() {
           {renderActiveView()}
         </main>
       </div>
+
+      {/* Botão Flutuante de Acesso Rápido ao Assistente */}
+      {activeModule !== 'assistente' && (
+        <button
+          type="button"
+          onClick={() => setActiveModule('assistente')}
+          className="fixed bottom-5 right-5 z-40 flex items-center gap-2 px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-xl shadow-emerald-950/60 hover:shadow-emerald-500/30 transition-all cursor-pointer border border-emerald-400/30 group"
+          title="Abrir Assistente Inteligente EDUMODS"
+        >
+          <Bot className="w-4 h-4 text-emerald-100 group-hover:scale-110 transition-transform" />
+          <span>Assistente IA</span>
+        </button>
+      )}
 
       {/* Modais Globais */}
       <TransactionModal

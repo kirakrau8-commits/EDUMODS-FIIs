@@ -53,7 +53,7 @@ export const ChartsView: React.FC = () => {
       totalMarketValue: totalMarketValue || 33500,
       monthlyDividendsTotal: currentMonthlyDiv,
       periodFilter,
-      transactions,
+      transactions: transactions.map((t) => ({ date: t.date, type: t.type, total: t.total ?? 0 })),
       dividends,
     });
   }, [totalInvested, totalMarketValue, currentMonthlyDiv, periodFilter, transactions, dividends]);
@@ -86,7 +86,7 @@ export const ChartsView: React.FC = () => {
   const maxHoldingValue = useMemo(() => {
     return Math.max(
       1,
-      ...holdingsBuildings.map((h) => Math.max(h.marketValue, h.totalCost))
+      ...holdingsBuildings.map((h) => Math.max(h.marketValue, h.totalCost ?? 0))
     );
   }, [holdingsBuildings]);
 
@@ -585,10 +585,10 @@ export const ChartsView: React.FC = () => {
                         Math.min(100, (h.marketValue / maxHoldingValue) * 100)
                       );
                       const costRatioPct =
-                        h.marketValue > 0
+                        h.marketValue > 0 && h.totalCost != null
                           ? Math.min(100, (h.totalCost / h.marketValue) * 100)
                           : 80;
-                      const isPositive = h.unrealizedGain >= 0;
+                      const isPositive = (h.unrealizedGain ?? 0) >= 0;
                       const isSelected = activeHoldingBuilding?.ticker === h.ticker;
                       const floors = Math.max(3, Math.min(9, Math.round((heightPct / 100) * 8)));
 
@@ -977,8 +977,8 @@ export const ChartsView: React.FC = () => {
 
             <div className="space-y-3 pt-2">
               {holdings.map((h) => {
-                const isGain = h.unrealizedGainPercent >= 0;
-                const widthPct = Math.min(100, Math.max(8, Math.abs(h.unrealizedGainPercent) * 6));
+                const isGain = (h.unrealizedGainPercent ?? 0) >= 0;
+                const widthPct = Math.min(100, Math.max(8, Math.abs(h.unrealizedGainPercent ?? 0) * 6));
 
                 return (
                   <div key={h.ticker} className="space-y-1">

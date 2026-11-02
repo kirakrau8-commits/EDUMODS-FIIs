@@ -39,11 +39,11 @@ export function generatePortfolioPDFReport(data: PDFExportData): void {
       <td style="padding: 8px 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${h.ticker}</td>
       <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">${h.category} - ${h.segment}</td>
       <td style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${h.quantity}</td>
-      <td style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${formatBRL(h.averagePrice)}</td>
+      <td style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${h.averagePrice != null && h.averagePrice > 0 ? formatBRL(h.averagePrice) : '-'}</td>
       <td style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${formatBRL(h.currentPrice)}</td>
       <td style="padding: 8px 12px; text-align: right; font-weight: bold; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${formatBRL(h.marketValue)}</td>
-      <td style="padding: 8px 12px; text-align: right; color: ${h.unrealizedGain >= 0 ? '#10B981' : '#EF4444'}; font-weight: bold; border-bottom: 1px solid #e2e8f0; font-family: monospace;">
-        ${h.unrealizedGain >= 0 ? '+' : ''}${formatBRL(h.unrealizedGain)} (${formatPercent(h.unrealizedGainPercent, true)})
+      <td style="padding: 8px 12px; text-align: right; color: ${(h.unrealizedGain ?? 0) >= 0 ? '#10B981' : '#EF4444'}; font-weight: bold; border-bottom: 1px solid #e2e8f0; font-family: monospace;">
+        ${h.unrealizedGain != null ? `${h.unrealizedGain >= 0 ? '+' : ''}${formatBRL(h.unrealizedGain)} (${formatPercent(h.unrealizedGainPercent, true)})` : '-'}
       </td>
       <td style="padding: 8px 12px; text-align: right; color: #10B981; font-weight: bold; border-bottom: 1px solid #e2e8f0; font-family: monospace;">
         ${formatPercent(h.annualDividendYield)}

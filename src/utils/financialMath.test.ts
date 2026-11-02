@@ -12,6 +12,8 @@ import {
   calculateFIREProgress,
   calculateYieldOnCost,
   computePortfolioEvolutionTimeline,
+  calculateDividendTotal,
+  roundCurrency,
 } from './financialMath.ts';
 import { formatBRL, parseFlexibleNumber } from './formatters.ts';
 
@@ -34,6 +36,42 @@ test('parseFlexibleNumber accepts both comma and dot decimal inputs for ALZR11 e
   assert.equal(priceComma, 10.86);
   assert.equal(Number((qty * rateComma).toFixed(2)), 6.72);
   assert.equal(Number((qty * priceComma).toFixed(2)), 868.8);
+});
+
+test('Mandatory Dividend Test Suite: 60 x 0,084 = 5,04; 119 x 0,095 = 11,31; 72 x 0,083 = 5,98', () => {
+  // Caso 1: 60 cotas x R$ 0,084 = R$ 5,04
+  const c1Total = calculateDividendTotal(60, 0.084);
+  assert.equal(c1Total, 5.04);
+  assert.equal(formatBRL(c1Total).replace(/\u00a0/g, ' '), 'R$ 5,04');
+
+  // Caso 2: 119 cotas x R$ 0,095 = 11,305 -> R$ 11,31
+  const c2Total = calculateDividendTotal(119, 0.095);
+  assert.equal(c2Total, 11.31);
+  assert.equal(formatBRL(c2Total).replace(/\u00a0/g, ' '), 'R$ 11,31');
+
+  // Caso 3: 72 cotas x R$ 0,083 = 5,976 -> R$ 5,98
+  const c3Total = calculateDividendTotal(72, 0.083);
+  assert.equal(c3Total, 5.98);
+  assert.equal(formatBRL(c3Total).replace(/\u00a0/g, ' '), 'R$ 5,98');
+});
+
+test('Unknown Average Price handling: returns null for totalCost, unrealizedGain, and unrealizedGainPercent', () => {
+  // Quando preço médio não é informado (null, undefined ou 0)
+  const resNull = calculateUnrealizedGain(100, null, 115);
+  assert.equal(resNull.totalCost, null);
+  assert.equal(resNull.marketValue, 11500);
+  assert.equal(resNull.unrealizedGain, null);
+  assert.equal(resNull.unrealizedGainPercent, null);
+
+  const resUndef = calculateUnrealizedGain(50, undefined, 10);
+  assert.equal(resUndef.totalCost, null);
+  assert.equal(resUndef.marketValue, 500);
+  assert.equal(resUndef.unrealizedGain, null);
+  assert.equal(resUndef.unrealizedGainPercent, null);
+
+  const yocNull = calculateYieldOnCost(null, 0.85);
+  assert.equal(yocNull.monthlyYoC, null);
+  assert.equal(yocNull.annualYoC, null);
 });
 
 test('calculateWeightedAveragePrice updates average price and quantity with fees', () => {

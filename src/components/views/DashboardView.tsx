@@ -534,7 +534,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono">
               {holdings.map((h) => {
-                const isItemProfit = h.unrealizedGain >= 0;
+                const hasKnownCost = h.averagePrice != null && h.averagePrice > 0 && h.unrealizedGain != null;
+                const isItemProfit = (h.unrealizedGain ?? 0) >= 0;
                 return (
                   <tr key={h.ticker} className="hover:bg-slate-800/40 transition-colors group">
                     <td className="py-3 px-3 font-bold text-white">
@@ -545,7 +546,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </td>
                     <td className="py-3 px-3 text-right text-slate-200">{h.quantity}</td>
                     <td className="py-3 px-3 text-right text-slate-300">
-                      {formatBRL(h.averagePrice, preferences.hideValues)}
+                      {h.averagePrice != null && h.averagePrice > 0
+                        ? formatBRL(h.averagePrice, preferences.hideValues)
+                        : 'Não informado'}
                     </td>
                     <td className="py-3 px-3 text-right text-white font-bold">
                       {formatBRL(h.currentPrice, preferences.hideValues)}
@@ -554,9 +557,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       {formatBRL(h.marketValue, preferences.hideValues)}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <span className={isItemProfit ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                        {formatPercent(h.unrealizedGainPercent, true)}
-                      </span>
+                      {hasKnownCost ? (
+                        <span className={isItemProfit ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                          {formatPercent(h.unrealizedGainPercent, true)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-sans">-</span>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right">
                       <span className={h.pvp <= 1.0 ? 'text-emerald-400' : 'text-amber-400'}>

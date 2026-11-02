@@ -32,7 +32,11 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
   useEffect(() => {
     if (holding) {
       setQuantity(String(holding.quantity));
-      setAveragePrice(String(holding.averagePrice).replace('.', ','));
+      setAveragePrice(
+        holding.averagePrice != null && holding.averagePrice > 0
+          ? String(holding.averagePrice).replace('.', ',')
+          : ''
+      );
       setCurrentPrice(String(holding.currentPrice).replace('.', ','));
       setVpa(String(holding.vpa || holding.currentPrice).replace('.', ','));
       setMonthlyYieldPerShare(String(holding.monthlyYieldPerShare || 0.8).replace('.', ','));
@@ -47,13 +51,16 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
   if (!isOpen || !holding) return null;
 
   const parsedQty = parseFlexibleNumber(quantity);
-  const parsedAvg = parseFlexibleNumber(averagePrice);
-  const totalInvested = parsedQty > 0 && parsedAvg > 0 ? Number((parsedQty * parsedAvg).toFixed(2)) : 0;
+  const parsedAvg = averagePrice.trim() ? parseFlexibleNumber(averagePrice) : null;
+  const totalInvested =
+    parsedQty > 0 && parsedAvg != null && parsedAvg > 0
+      ? Number((parsedQty * parsedAvg).toFixed(2))
+      : null;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const q = parseFlexibleNumber(quantity);
-    const avg = parseFlexibleNumber(averagePrice);
+    const avg = averagePrice.trim() ? parseFlexibleNumber(averagePrice) : null;
     const cur = parseFlexibleNumber(currentPrice);
     const parsedVpa = parseFlexibleNumber(vpa);
     const parsedDiv = parseFlexibleNumber(monthlyYieldPerShare);
@@ -63,16 +70,12 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
       setFeedback('Informe uma quantidade de cotas válida.');
       return;
     }
-    if (isNaN(avg) || avg < 0) {
-      setFeedback('Informe um preço médio por cota válido.');
-      return;
-    }
 
     setIsSaving(true);
     try {
       await updateHolding(holding.ticker, {
         quantity: q,
-        averagePrice: avg,
+        averagePrice: avg != null && avg > 0 ? avg : null,
         currentPrice: cur > 0 ? cur : holding.currentPrice,
         vpa: parsedVpa > 0 ? parsedVpa : holding.vpa,
         monthlyYieldPerShare: parsedDiv >= 0 ? parsedDiv : holding.monthlyYieldPerShare,
@@ -189,9 +192,9 @@ export const EditHoldingModal: React.FC<EditHoldingModalProps> = ({
             </div>
             <div className="flex items-baseline justify-between pt-1">
               <span className="text-xs text-slate-400 font-mono">
-                {parsedQty > 0 && parsedAvg > 0
+                {parsedQty > 0 && parsedAvg != null && parsedAvg > 0
                   ? `${parsedQty} cotas × ${formatBRL(parsedAvg)}`
-                  : 'Preencha quantidade e preço médio'}
+                  : 'Preço médio não informado (custo desconhecido)'}
               </span>
               <strong className="text-xl font-extrabold font-mono text-emerald-400">
                 {formatBRL(totalInvested)}

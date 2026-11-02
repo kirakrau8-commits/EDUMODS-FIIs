@@ -20,12 +20,14 @@ import {
   Sliders,
   Layers,
   X,
+  Bot,
 } from 'lucide-react';
 
 export type AppModuleId =
   | 'inicio'
   | 'carteira'
   | 'rendimentos'
+  | 'assistente'
   | 'metas'
   | 'calculadoras'
   | 'distribuicao'
@@ -74,8 +76,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'inicio', label: 'Início', icon: LayoutDashboard },
         { id: 'carteira', label: 'Minha Carteira', icon: Briefcase },
         { id: 'rendimentos', label: 'Rendimentos', icon: CalendarDays },
+        { id: 'assistente', label: 'Assistente IA', icon: Bot, badge: 'IA' },
         { id: 'metas', label: 'Metas', icon: Target },
-        { id: 'calculadoras', label: 'Calculadoras', icon: Calculator, badge: '10+' },
+        { id: 'calculadoras', label: 'Juros Compostos', icon: Calculator, badge: 'Simulador' },
         { id: 'distribuicao', label: 'Distribuição', icon: PieChart },
       ],
     },

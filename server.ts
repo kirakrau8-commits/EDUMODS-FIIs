@@ -10,6 +10,7 @@ import {
   runAutomaticFinancialMonitor,
   getServerMonitoringStatus,
 } from './src/server/pushAndMonitorService';
+import { processAssistantChatMessage } from './src/server/geminiAssistantService';
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -167,6 +168,19 @@ async function startServer() {
 
   app.get('/api/cron/monitor', handleCronMonitor);
   app.post('/api/cron/monitor', handleCronMonitor);
+
+  // 7. Assistente de Inteligência Artificial Especializado em FIIs (Gemini 3.8 Flash)
+  app.post('/api/assistant/chat', async (req, res) => {
+    try {
+      const response = await processAssistantChatMessage(req.body || {});
+      res.json(response);
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Erro ao processar mensagem com assistente.',
+        reply: 'Desculpe, ocorreu uma instabilidade temporária ao consultar o modelo financeiro.',
+      });
+    }
+  });
 
   // Vite middleware em desenvolvimento; estáticos de dist em produção
   if (process.env.NODE_ENV !== 'production') {

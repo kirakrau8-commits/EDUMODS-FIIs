@@ -19,6 +19,32 @@ export interface SaleCalculationResult {
 }
 
 /**
+ * Arredondamento financeiro padrão ABNT / NBR 5891 que evita desvios do ponto flutuante IEEE 754.
+ * Exemplo: 119 * 0.095 = 11.305 -> 11.31
+ */
+export function roundCurrency(value: number, decimals: number = 2): number {
+  if (value === undefined || value === null || isNaN(value)) return 0;
+  const factor = Math.pow(10, decimals);
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+/**
+ * Calcula o provento total a receber multiplicando cotas elegíveis pelo valor por cota,
+ * garantindo o arredondamento financeiro de 2 casas decimais.
+ * Exemplos obrigatórios testados:
+ * - 60 x 0,084 = 5,04
+ * - 119 x 0,095 = 11,305 -> 11,31
+ * - 72 x 0,083 = 5,976 -> 5,98
+ */
+export function calculateDividendTotal(
+  quantityEligible: number,
+  ratePerShare: number
+): number {
+  if (quantityEligible <= 0 || ratePerShare <= 0) return 0;
+  return roundCurrency(quantityEligible * ratePerShare, 2);
+}
+
+/**
  * Calcula o Preço Médio Ponderado após nova compra, incluindo taxas operacionais.
  */
 export function calculateWeightedAveragePrice(
@@ -81,23 +107,40 @@ export function calculateSaleResult(
 
 /**
  * Calcula o resultado não realizado (lucro/prejuízo no papel) e rentabilidade %.
+ * Se o preço médio for desconhecido (null, undefined ou <= 0), NÃO calcula ganho falso
+ * e retorna totalCost, unrealizedGain e unrealizedGainPercent como null.
  */
 export function calculateUnrealizedGain(
   quantity: number,
-  avgPrice: number,
+  avgPrice: number | null | undefined,
   currentPrice: number
-) {
-  const totalCost = quantity * avgPrice;
-  const marketValue = quantity * currentPrice;
-  const unrealizedGain = marketValue - totalCost;
+): {
+  totalCost: number | null;
+  marketValue: number;
+  unrealizedGain: number | null;
+  unrealizedGainPercent: number | null;
+} {
+  const marketValue = Number((Math.max(0, quantity) * Math.max(0, currentPrice)).toFixed(2));
+
+  if (avgPrice == null || avgPrice <= 0 || isNaN(avgPrice)) {
+    return {
+      totalCost: null,
+      marketValue,
+      unrealizedGain: null,
+      unrealizedGainPercent: null,
+    };
+  }
+
+  const totalCost = Number((Math.max(0, quantity) * avgPrice).toFixed(2));
+  const unrealizedGain = Number((marketValue - totalCost).toFixed(2));
   const unrealizedGainPercent =
-    totalCost > 0 ? (unrealizedGain / totalCost) * 100 : 0;
+    totalCost > 0 ? Number(((unrealizedGain / totalCost) * 100).toFixed(2)) : 0;
 
   return {
-    totalCost: Number(totalCost.toFixed(2)),
-    marketValue: Number(marketValue.toFixed(2)),
-    unrealizedGain: Number(unrealizedGain.toFixed(2)),
-    unrealizedGainPercent: Number(unrealizedGainPercent.toFixed(2)),
+    totalCost,
+    marketValue,
+    unrealizedGain,
+    unrealizedGainPercent,
   };
 }
 
@@ -385,13 +428,19 @@ export function calculateFIREProgress(
 
 /**
  * Calcula o Yield on Cost (YoC) anual e mensal com base no preço médio de aquisição.
+ * Se o preço médio não foi informado (desconhecido), retorna null para ambos.
  */
 export function calculateYieldOnCost(
-  averagePrice: number,
+  averagePrice: number | null | undefined,
   monthlyDividendPerShare: number
-): { monthlyYoC: number; annualYoC: number } {
-  if (averagePrice <= 0 || monthlyDividendPerShare <= 0) {
-    return { monthlyYoC: 0, annualYoC: 0 };
+): { monthlyYoC: number | null; annualYoC: number | null } {
+  if (
+    averagePrice == null ||
+    averagePrice <= 0 ||
+    isNaN(averagePrice) ||
+    monthlyDividendPerShare <= 0
+  ) {
+    return { monthlyYoC: null, annualYoC: null };
   }
   const monthlyYoC = (monthlyDividendPerShare / averagePrice) * 100;
   const annualYoC = monthlyYoC * 12;

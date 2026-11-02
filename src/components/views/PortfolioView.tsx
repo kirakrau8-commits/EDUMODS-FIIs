@@ -327,7 +327,7 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
           </div>
         ) : (
           filteredHoldings.map((h) => {
-            const isItemProfit = h.unrealizedGain >= 0;
+            const isItemProfit = (h.unrealizedGain ?? 0) >= 0;
             const isEditingNotes = editingNotesTicker === h.ticker;
             const isEditingTarget = editingTargetTicker === h.ticker;
             const isConfirmingDelete = confirmDeleteTicker === h.ticker;
@@ -456,7 +456,11 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
 
                   <div>
                     <span className="text-[10px] text-slate-500 font-sans uppercase block">Preço Médio</span>
-                    <strong className="text-slate-300">{formatBRL(h.averagePrice, preferences.hideValues)}</strong>
+                    <strong className="text-slate-300">
+                      {h.averagePrice != null && h.averagePrice > 0
+                        ? formatBRL(h.averagePrice, preferences.hideValues)
+                        : 'Não informado'}
+                    </strong>
                   </div>
 
                   <div>
@@ -471,9 +475,13 @@ export const PortfolioView: React.FC<PortfolioViewProps> = ({
 
                   <div>
                     <span className="text-[10px] text-slate-500 font-sans uppercase block">Lucro / Prejuízo</span>
-                    <strong className={isItemProfit ? 'text-emerald-400' : 'text-rose-400'}>
-                      {formatBRL(h.unrealizedGain, preferences.hideValues, true)} ({formatPercent(h.unrealizedGainPercent, true)})
-                    </strong>
+                    {h.unrealizedGain != null && h.averagePrice != null && h.averagePrice > 0 ? (
+                      <strong className={isItemProfit ? 'text-emerald-400' : 'text-rose-400'}>
+                        {formatBRL(h.unrealizedGain, preferences.hideValues, true)} ({formatPercent(h.unrealizedGainPercent, true)})
+                      </strong>
+                    ) : (
+                      <span className="text-slate-400 font-sans">-</span>
+                    )}
                   </div>
 
                   <div>

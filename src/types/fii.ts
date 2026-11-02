@@ -19,12 +19,12 @@ export interface FIIHolding {
   category: FIICategory;
   segment: FIISegment;
   quantity: number;
-  averagePrice: number;
+  averagePrice?: number | null; // null/undefined quando desconhecido pelo investidor
   currentPrice: number;
-  totalCost: number;
+  totalCost?: number | null; // null quando o preço médio for desconhecido (evita zero artificial)
   marketValue: number;
-  unrealizedGain: number;
-  unrealizedGainPercent: number;
+  unrealizedGain?: number | null; // null quando preço médio desconhecido (evita lucro falso de 100%)
+  unrealizedGainPercent?: number | null; // null quando preço médio desconhecido
   monthlyYieldPerShare: number;
   monthlyDividendYield: number; // percentage, e.g. 0.85
   annualDividendYield: number; // percentage, e.g. 10.2
@@ -49,10 +49,10 @@ export interface Transaction {
   type: OperationType;
   date: string; // YYYY-MM-DD
   quantity: number;
-  price: number;
+  price?: number | null; // null quando preço de aquisição desconhecido
   fees: number;
-  total: number;
-  realizedResult?: number; // Para vendas: lucro/prejuízo realizado
+  total?: number | null; // null se preço desconhecido
+  realizedResult?: number | null; // Para vendas: lucro/prejuízo realizado
   notes?: string;
 }
 

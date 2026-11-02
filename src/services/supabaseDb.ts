@@ -107,7 +107,7 @@ interface RawHoldingRow {
   user_id: string;
   ticker: string;
   quantity: number | string;
-  average_price: number | string;
+  average_price: number | string | null;
   category: string;
   segment: string;
   notes: string | null;
@@ -131,7 +131,7 @@ interface RawTransactionRow {
   type: string;
   date: string;
   quantity: number | string;
-  price: number | string;
+  price: number | string | null;
   fees: number | string;
   realized_result?: number | string | null;
   broker?: string | null;
@@ -715,7 +715,7 @@ export async function saveHoldingToDb(userId: string, holding: FIIHolding): Prom
     user_id: userId,
     ticker: cleanTicker,
     quantity: holding.quantity,
-    average_price: holding.averagePrice,
+    average_price: holding.averagePrice ?? null,
     category: holding.category,
     segment: holding.segment,
     notes: holding.notes || '',
@@ -863,7 +863,7 @@ export async function saveTransactionToDb(userId: string, tx: Transaction): Prom
     type: tx.type,
     date: tx.date,
     quantity: tx.quantity,
-    price: tx.price,
+    price: tx.price ?? null,
     fees: tx.fees || 0,
     realized_result: tx.realizedResult !== undefined ? tx.realizedResult : null,
     broker: 'B3 Oficial',

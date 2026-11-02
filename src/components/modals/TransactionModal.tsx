@@ -49,6 +49,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [quantity, setQuantity] = useState<string>('80');
   const [price, setPrice] = useState<string>('10,86');
+  const [isPriceUnknown, setIsPriceUnknown] = useState<boolean>(false);
   const [fees, setFees] = useState<string>('0,00');
   const [notes, setNotes] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -164,8 +165,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setErrorMsg('Informe a quantidade de cotas (deve ser maior que zero).');
       return false;
     }
-    if (numPrice <= 0) {
-      setErrorMsg('Informe o preço médio por cota em reais (deve ser maior que zero).');
+    if (!isPriceUnknown && numPrice <= 0) {
+      setErrorMsg('Informe o preço médio por cota em reais ou marque "Preço médio desconhecido".');
       return false;
     }
     if (type === 'VENDA' && (!currentHolding || numQty > currentHolding.quantity)) {
@@ -195,7 +196,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         type,
         date,
         quantity: numQty,
-        price: numPrice,
+        price: isPriceUnknown ? null : numPrice,
         fees: numFees,
         notes,
       });
@@ -209,11 +210,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         return;
       }
 
-      setSuccessMsg(
-        `${cleanTicker} (${numQty} cotas × ${formatBRL(numPrice)} = ${formatBRL(
-          totalInvestedOrder
-        )}) salvo na sua carteira!`
-      );
+      const summaryText = isPriceUnknown
+        ? `${cleanTicker} (${numQty} cotas — preço desconhecido) salvo na sua carteira!`
+        : `${cleanTicker} (${numQty} cotas × ${formatBRL(numPrice)} = ${formatBRL(
+            totalInvestedOrder
+          )}) salvo na sua carteira!`;
+
+      setSuccessMsg(summaryText);
       setTimeout(() => {
         setSuccessMsg(null);
         onClose();
@@ -470,9 +473,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
                 {/* Campo 3: Preço médio de compra por cota */}
                 <div className="space-y-1">
-                  <label htmlFor="price-input" className="text-sm font-bold text-emerald-400 block">
-                    3. Preço médio de compra por cota
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="price-input" className="text-sm font-bold text-emerald-400 block">
+                      3. Preço médio de compra por cota
+                    </label>
+                  </div>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-sm font-bold">
                       R$
@@ -481,16 +486,38 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       id="price-input"
                       type="text"
                       inputMode="decimal"
-                      value={price}
+                      value={isPriceUnknown ? '' : price}
                       onChange={(e) => setPrice(e.target.value)}
-                      placeholder="Ex.: 10,86"
-                      required
-                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-900 border-2 border-emerald-500/50 rounded-xl text-white font-mono text-base font-bold tabular-nums focus:outline-hidden focus:border-emerald-400"
+                      placeholder={isPriceUnknown ? 'Não informado' : 'Ex.: 10,86'}
+                      disabled={isPriceUnknown}
+                      required={!isPriceUnknown}
+                      className={`w-full pl-10 pr-3.5 py-2.5 rounded-xl font-mono text-base font-bold tabular-nums focus:outline-hidden ${
+                        isPriceUnknown
+                          ? 'bg-slate-900/50 border border-slate-800 text-slate-500 cursor-not-allowed'
+                          : 'bg-slate-900 border-2 border-emerald-500/50 text-white focus:border-emerald-400'
+                      }`}
                     />
                   </div>
-                  <p className="text-[11px] text-slate-200">
-                    Informe quanto você pagou por <strong className="text-white">cada 1 cota</strong> (não digite o valor total).
-                  </p>
+                  <div className="pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300 hover:text-white">
+                      <input
+                        type="checkbox"
+                        checked={isPriceUnknown}
+                        onChange={(e) => setIsPriceUnknown(e.target.checked)}
+                        className="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-emerald-500 h-3.5 w-3.5"
+                      />
+                      <span>Preço médio desconhecido / Não informado</span>
+                    </label>
+                    {isPriceUnknown ? (
+                      <p className="mt-1 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                        Preço médio não informado. O sistema registrará as cotas e a cotação da B3 sem calcular lucro/prejuízo artificial ou YoC.
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-200">
+                        Informe quanto você pagou por <strong className="text-white">cada 1 cota</strong> (não digite o valor total).
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 

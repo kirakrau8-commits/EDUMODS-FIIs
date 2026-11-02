@@ -34,7 +34,7 @@ export const DistributionView: React.FC = () => {
     const total = baseMetric === 'market' ? totalMarketValue : totalInvested;
 
     holdings.forEach((h) => {
-      const val = baseMetric === 'market' ? h.marketValue : h.totalCost;
+      const val = baseMetric === 'market' ? h.marketValue : (h.totalCost ?? 0);
       map[h.category] = (map[h.category] || 0) + val;
     });
 
@@ -51,7 +51,7 @@ export const DistributionView: React.FC = () => {
     const total = baseMetric === 'market' ? totalMarketValue : totalInvested;
 
     holdings.forEach((h) => {
-      const val = baseMetric === 'market' ? h.marketValue : h.totalCost;
+      const val = baseMetric === 'market' ? h.marketValue : (h.totalCost ?? 0);
       map[h.segment] = (map[h.segment] || 0) + val;
     });
 
@@ -69,7 +69,7 @@ export const DistributionView: React.FC = () => {
 
     holdings.forEach((h) => {
       const managerName = h.manager || 'Outros';
-      const val = baseMetric === 'market' ? h.marketValue : h.totalCost;
+      const val = baseMetric === 'market' ? h.marketValue : (h.totalCost ?? 0);
       map[managerName] = (map[managerName] || 0) + val;
     });
 
@@ -87,7 +87,7 @@ export const DistributionView: React.FC = () => {
 
     holdings.forEach((h) => {
       const idx = h.indexer || 'IPCA';
-      const val = baseMetric === 'market' ? h.marketValue : h.totalCost;
+      const val = baseMetric === 'market' ? h.marketValue : (h.totalCost ?? 0);
       map[idx] = (map[idx] || 0) + val;
     });
 

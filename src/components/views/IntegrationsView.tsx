@@ -16,7 +16,7 @@ import { brapiAdapter, provider2Adapter, provider3Adapter } from '../../services
 export const IntegrationsView: React.FC = () => {
   const { preferences, updatePreferences, refreshQuotes, isRefreshingQuotes, lastQuoteUpdate, holdings } = usePortfolio();
 
-  const [brapiToken, setBrapiToken] = useState(preferences.brapiToken || '');
+  const [brapiToken, setBrapiToken] = useState(preferences.brapiToken || 'uLudELZWq6ovf5SRhsK53B');
   const [testingBrapi, setTestingBrapi] = useState(false);
   const [brapiTestResult, setBrapiTestResult] = useState<{ success: boolean; message: string; latencyMs?: number } | null>(null);
 
@@ -36,7 +36,7 @@ export const IntegrationsView: React.FC = () => {
 
   // Sincroniza o formulário quando as preferências do usuário carregam do Supabase
   useEffect(() => {
-    setBrapiToken(preferences.brapiToken || '');
+    setBrapiToken(preferences.brapiToken || 'uLudELZWq6ovf5SRhsK53B');
     setP2Name(preferences.provider2Name || 'Provedor Secundário');
     setP2Enabled(preferences.provider2Enabled || false);
     setP2Endpoint(preferences.provider2Endpoint || '');
